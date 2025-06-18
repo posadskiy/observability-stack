@@ -1,0 +1,126 @@
+{
+  "dashboard": {
+    "id": null,
+    "title": "Logs Dashboard",
+    "tags": ["logs", "loki"],
+    "style": "dark",
+    "timezone": "browser",
+    "panels": [
+      {
+        "id": 1,
+        "title": "Log Volume",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "sum(rate({job=\"docker\"}[5m]))",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "displayMode": "list"
+            }
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 0
+        }
+      },
+      {
+        "id": 2,
+        "title": "Recent Logs",
+        "type": "logs",
+        "targets": [
+          {
+            "expr": "{job=\"docker\"}",
+            "refId": "A",
+            "maxLines": 100
+          }
+        ],
+        "gridPos": {
+          "h": 12,
+          "w": 24,
+          "x": 0,
+          "y": 8
+        },
+        "options": {
+          "showTime": true,
+          "showLabels": true,
+          "showCommonLabels": false,
+          "wrapLogMessage": true
+        }
+      },
+      {
+        "id": 3,
+        "title": "Error Logs",
+        "type": "logs",
+        "targets": [
+          {
+            "expr": "{job=\"docker\"} |= \"error\"",
+            "refId": "A",
+            "maxLines": 50
+          }
+        ],
+        "gridPos": {
+          "h": 12,
+          "w": 12,
+          "x": 0,
+          "y": 20
+        },
+        "options": {
+          "showTime": true,
+          "showLabels": true,
+          "showCommonLabels": false,
+          "wrapLogMessage": true
+        }
+      },
+      {
+        "id": 4,
+        "title": "Container Logs by Service",
+        "type": "table",
+        "targets": [
+          {
+            "expr": "sum by (container_name) (rate({job=\"docker\"}[5m]))",
+            "refId": "A"
+          }
+        ],
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 20
+        },
+        "transformations": [
+          {
+            "id": "organize",
+            "options": {
+              "excludeByName": {
+                "Time": true,
+                "__name__": true,
+                "job": true,
+                "instance": true
+              },
+              "indexByName": {},
+              "renameByName": {
+                "container_name": "Container",
+                "Value": "Log Rate"
+              }
+            }
+          }
+        ]
+      }
+    ],
+    "time": {
+      "from": "now-1h",
+      "to": "now"
+    },
+    "refresh": "5s"
+  }
+} 
