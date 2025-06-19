@@ -9,28 +9,50 @@ clients:
   - url: http://loki:3100/loki/api/v1/push
 
 scrape_configs:
-  # Docker container logs
+  # Docker container logs with service discovery
   - job_name: docker
-    static_configs:
-      - targets:
-          - localhost
-        labels:
-          job: docker
-          __path__: /var/lib/docker/containers/*/*log
-
-    
-
-  # System logs
-  - job_name: system
-    static_configs:
-      - targets:
-          - localhost
-        labels:
-          job: system
-          __path__: /var/log/*log
+    docker_sd_configs:
+      - host: unix:///var/run/docker.sock
+        refresh_interval: 5s
+    relabel_configs:
+      # Keep only containers that have logs
+      - source_labels: [__meta_docker_container_log_stream]
+        regex: .+
+        action: keep
+      
+      # Add container name as label
+      - source_labels: [__meta_docker_container_name]
+        regex: "/(.+)"
+        target_label: container_name
+      
+      # Add compose service name as label
+      - source_labels: [__meta_docker_container_label_com_docker_compose_service]
+        target_label: service
+      
+      # Add compose project name as label
+      - source_labels: [__meta_docker_container_label_com_docker_compose_project]
+        target_label: project
+      
+      # Add container image as label
+      - source_labels: [__meta_docker_container_image]
+        target_label: image
+      
+      # Set the log file path
+      - source_labels: [__meta_docker_container_log_stream]
+        target_label: __path__
 
     pipeline_stages:
+      - json:
+          expressions:
+            stream: stream
+            attrs: attrs
+            tag: attrs.tag
+            time: time
       - labels:
-          job:
+          stream:
+          tag:
+      - timestamp:
+          source: time
+          format: RFC3339Nano
       - output:
-          source: log 
+          source: log
