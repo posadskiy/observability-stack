@@ -1,0 +1,61 @@
+{
+  "title": "Loki Logs Dashboard - Development",
+  "tags": ["logs", "loki"],
+  "style": "dark",
+  "timezone": "browser",
+  "panels": [
+    {
+      "id": 1,
+      "title": "Recent Logs",
+      "type": "logs",
+      "targets": [
+        {
+          "expr": "{job=\"docker\"}",
+          "refId": "A",
+          "maxLines": 100
+        }
+      ],
+      "gridPos": {
+        "h": 12,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "options": {
+        "showTime": true,
+        "showLabels": true,
+        "showCommonLabels": false,
+        "wrapLogMessage": true
+      }
+    },
+    {
+      "id": 2,
+      "title": "Error Logs",
+      "type": "logs",
+      "targets": [
+        {
+          "expr": "{job=\"docker\"} |= \"error\"",
+          "refId": "A",
+          "maxLines": 50
+        }
+      ],
+      "gridPos": {
+        "h": 12,
+        "w": 12,
+        "x": 0,
+        "y": 12
+      },
+      "options": {
+        "showTime": true,
+        "showLabels": true,
+        "showCommonLabels": false,
+        "wrapLogMessage": true
+      }
+    }
+  ],
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "refresh": "5s"
+} 
