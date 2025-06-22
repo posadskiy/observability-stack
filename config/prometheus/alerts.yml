@@ -1,0 +1,180 @@
+groups:
+  - name: service_alerts
+    rules:
+      # Service Down Alerts
+      - alert: ServiceDown
+        expr: up{job=~"user-service|auth-service"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Service {{ $labels.job }} is down"
+          description: "Service {{ $labels.job }} has been down for more than 1 minute."
+
+      # High Error Rate Alerts
+      - alert: HighErrorRate
+        expr: rate(http_server_requests_seconds_count{job=~"user-service|auth-service", status=~"4..|5.."}[5m]) > 0.1
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High error rate for {{ $labels.job }}"
+          description: "Error rate for {{ $labels.job }} is {{ $value }} errors per second over 5 minutes."
+
+      - alert: CriticalErrorRate
+        expr: rate(http_server_requests_seconds_count{job=~"user-service|auth-service", status=~"4..|5.."}[5m]) > 0.5
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Critical error rate for {{ $labels.job }}"
+          description: "Error rate for {{ $labels.job }} is {{ $value }} errors per second over 5 minutes."
+
+      # High Response Time Alerts
+      - alert: HighResponseTime
+        expr: histogram_quantile(0.95, rate(http_server_requests_seconds_bucket{job=~"user-service|auth-service"}[5m])) > 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High response time for {{ $labels.job }}"
+          description: "95th percentile response time for {{ $labels.job }} is {{ $value }} seconds."
+
+      - alert: CriticalResponseTime
+        expr: histogram_quantile(0.95, rate(http_server_requests_seconds_bucket{job=~"user-service|auth-service"}[5m])) > 5
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Critical response time for {{ $labels.job }}"
+          description: "95th percentile response time for {{ $labels.job }} is {{ $value }} seconds."
+
+      # High Request Rate Alerts
+      - alert: HighRequestRate
+        expr: rate(http_server_requests_seconds_count{job=~"user-service|auth-service"}[5m]) > 100
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High request rate for {{ $labels.job }}"
+          description: "Request rate for {{ $labels.job }} is {{ $value }} requests per second."
+
+      # JVM Memory Usage Alerts
+      - alert: HighJVMMemoryUsage
+        expr: (jvm_memory_used_bytes{job=~"user-service|auth-service", area="heap"} / jvm_memory_max_bytes{job=~"user-service|auth-service", area="heap"}) > 0.8
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High JVM memory usage for {{ $labels.job }}"
+          description: "JVM heap memory usage for {{ $labels.job }} is {{ $value | humanizePercentage }}."
+
+      - alert: CriticalJVMMemoryUsage
+        expr: (jvm_memory_used_bytes{job=~"user-service|auth-service", area="heap"} / jvm_memory_max_bytes{job=~"user-service|auth-service", area="heap"}) > 0.9
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Critical JVM memory usage for {{ $labels.job }}"
+          description: "JVM heap memory usage for {{ $labels.job }} is {{ $value | humanizePercentage }}."
+
+      # JVM Thread Alerts
+      - alert: HighThreadCount
+        expr: jvm_threads_live_threads{job=~"user-service|auth-service"} > 100
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High thread count for {{ $labels.job }}"
+          description: "Thread count for {{ $labels.job }} is {{ $value }}."
+
+      # Database Connection Pool Alerts
+      - alert: HighConnectionPoolUsage
+        expr: (hikaricp_connections_active{job=~"user-service|auth-service"} / hikaricp_connections_max{job=~"user-service|auth-service"}) > 0.8
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High connection pool usage for {{ $labels.job }}"
+          description: "Connection pool usage for {{ $labels.job }} is {{ $value | humanizePercentage }}."
+
+      - alert: ConnectionPoolExhausted
+        expr: hikaricp_connections_pending{job=~"user-service|auth-service"} > 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Connection pool exhausted for {{ $labels.job }}"
+          description: "Connection pool for {{ $labels.job }} has {{ $value }} pending connections."
+
+      # System CPU Usage Alerts
+      - alert: HighSystemCPUUsage
+        expr: system_cpu_usage{job=~"user-service|auth-service"} > 0.8
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High system CPU usage for {{ $labels.job }}"
+          description: "System CPU usage for {{ $labels.job }} is {{ $value | humanizePercentage }}."
+
+      # GC Pause Time Alerts
+      - alert: HighGCPauseTime
+        expr: rate(jvm_gc_pause_seconds_sum{job=~"user-service|auth-service"}[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High GC pause time for {{ $labels.job }}"
+          description: "GC pause time for {{ $labels.job }} is {{ $value }} seconds per second."
+
+      # Log Error Rate Alerts
+      - alert: HighLogErrorRate
+        expr: rate(logback_events_total{job=~"user-service|auth-service", level="error"}[5m]) > 0.1
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High error log rate for {{ $labels.job }}"
+          description: "Error log rate for {{ $labels.job }} is {{ $value }} errors per second."
+
+  - name: infrastructure_alerts
+    rules:
+      # Prometheus Down
+      - alert: PrometheusDown
+        expr: up{job="prometheus"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Prometheus is down"
+          description: "Prometheus has been down for more than 1 minute."
+
+      # Grafana Down
+      - alert: GrafanaDown
+        expr: up{job="grafana"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Grafana is down"
+          description: "Grafana has been down for more than 1 minute."
+
+      # Loki Down
+      - alert: LokiDown
+        expr: up{job="loki"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Loki is down"
+          description: "Loki has been down for more than 1 minute."
+
+      # Jaeger Down
+      - alert: JaegerDown
+        expr: up{job="jaeger"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Jaeger is down"
+          description: "Jaeger has been down for more than 1 minute." 

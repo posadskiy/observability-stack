@@ -277,7 +277,7 @@ docker-compose -f docker-compose.dev.yaml down -v
 ### Jaeger Configuration
 - Modify environment variables for different storage backends
 - Configure sampling rates for production use
-- Add authentication and security settings
+- Add authentication and security settings 
 
 ### Prometheus Configuration
 - Edit `config/prometheus/prometheus.yml` to add new scrape targets

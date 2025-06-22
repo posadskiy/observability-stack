@@ -1,0 +1,269 @@
+{
+  "id": null,
+  "title": "Alerts Overview",
+  "tags": ["alerts", "monitoring"],
+  "style": "dark",
+  "timezone": "browser",
+  "panels": [
+    {
+      "id": 1,
+      "title": "Active Alerts by Severity",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "count(ALERTS{alertstate=\"firing\"}) by (severity)",
+          "refId": "A",
+          "legendFormat": "{{severity}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "steps": [
+              {"color": "green", "value": 0},
+              {"color": "yellow", "value": 1},
+              {"color": "red", "value": 5}
+            ]
+          }
+        }
+      },
+      "gridPos": {"h": 8, "w": 6, "x": 0, "y": 0}
+    },
+    {
+      "id": 2,
+      "title": "Service Health Status",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "up{job=~\"user-service|auth-service\"}",
+          "refId": "A",
+          "legendFormat": "{{job}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "steps": [
+              {"color": "red", "value": 0},
+              {"color": "green", "value": 1}
+            ]
+          }
+        }
+      },
+      "gridPos": {"h": 8, "w": 6, "x": 6, "y": 0}
+    },
+    {
+      "id": 3,
+      "title": "HTTP Request Rate",
+      "type": "graph",
+      "targets": [
+        {
+          "expr": "rate(http_server_requests_seconds_count{job=~\"user-service|auth-service\"}[5m])",
+          "refId": "A",
+          "legendFormat": "{{job}} - {{method}} {{uri}}"
+        }
+      ],
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+      "yAxes": [
+        {
+          "label": "Requests per second",
+          "min": 0
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "HTTP Response Time (95th percentile)",
+      "type": "graph",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, rate(http_server_requests_seconds_bucket{job=~\"user-service|auth-service\"}[5m]))",
+          "refId": "A",
+          "legendFormat": "{{job}} - {{method}} {{uri}}"
+        }
+      ],
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+      "yAxes": [
+        {
+          "label": "Response time (seconds)",
+          "min": 0
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        }
+      }
+    },
+    {
+      "id": 5,
+      "title": "JVM Memory Usage",
+      "type": "graph",
+      "targets": [
+        {
+          "expr": "jvm_memory_used_bytes{job=~\"user-service|auth-service\", area=\"heap\"} / 1024 / 1024",
+          "refId": "A",
+          "legendFormat": "{{job}} - {{id}}"
+        }
+      ],
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+      "yAxes": [
+        {
+          "label": "Memory (MB)",
+          "min": 0
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "MB"
+        }
+      }
+    },
+    {
+      "id": 6,
+      "title": "JVM Threads",
+      "type": "graph",
+      "targets": [
+        {
+          "expr": "jvm_threads_live_threads{job=~\"user-service|auth-service\"}",
+          "refId": "A",
+          "legendFormat": "{{job}} - Live threads"
+        },
+        {
+          "expr": "jvm_threads_daemon_threads{job=~\"user-service|auth-service\"}",
+          "refId": "B",
+          "legendFormat": "{{job}} - Daemon threads"
+        }
+      ],
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16},
+      "yAxes": [
+        {
+          "label": "Thread count",
+          "min": 0
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "Database Connection Pool",
+      "type": "graph",
+      "targets": [
+        {
+          "expr": "hikaricp_connections_active{job=~\"user-service|auth-service\"}",
+          "refId": "A",
+          "legendFormat": "{{job}} - Active connections"
+        },
+        {
+          "expr": "hikaricp_connections_idle{job=~\"user-service|auth-service\"}",
+          "refId": "B",
+          "legendFormat": "{{job}} - Idle connections"
+        },
+        {
+          "expr": "hikaricp_connections_max{job=~\"user-service|auth-service\"}",
+          "refId": "C",
+          "legendFormat": "{{job}} - Max connections"
+        }
+      ],
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16},
+      "yAxes": [
+        {
+          "label": "Connections",
+          "min": 0
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "title": "System CPU Usage",
+      "type": "graph",
+      "targets": [
+        {
+          "expr": "system_cpu_usage{job=~\"user-service|auth-service\"} * 100",
+          "refId": "A",
+          "legendFormat": "{{job}}"
+        }
+      ],
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 24},
+      "yAxes": [
+        {
+          "label": "CPU %",
+          "min": 0,
+          "max": 100
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "title": "GC Pause Time",
+      "type": "graph",
+      "targets": [
+        {
+          "expr": "rate(jvm_gc_pause_seconds_sum{job=~\"user-service|auth-service\"}[5m])",
+          "refId": "A",
+          "legendFormat": "{{job}} - {{gc}}"
+        }
+      ],
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 24},
+      "yAxes": [
+        {
+          "label": "GC pause time per second",
+          "min": 0
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        }
+      }
+    },
+    {
+      "id": 10,
+      "title": "HTTP Error Rate",
+      "type": "graph",
+      "targets": [
+        {
+          "expr": "rate(http_server_requests_seconds_count{job=~\"user-service|auth-service\", status=~\"4..|5..\"}[5m])",
+          "refId": "A",
+          "legendFormat": "{{job}} - {{method}} {{uri}} {{status}}"
+        }
+      ],
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 32},
+      "yAxes": [
+        {
+          "label": "Errors per second",
+          "min": 0
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "title": "Log Events",
+      "type": "graph",
+      "targets": [
+        {
+          "expr": "rate(logback_events_total{job=~\"user-service|auth-service\"}[5m])",
+          "refId": "A",
+          "legendFormat": "{{job}} - {{level}}"
+        }
+      ],
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 32},
+      "yAxes": [
+        {
+          "label": "Log events per second",
+          "min": 0
+        }
+      ]
+    }
+  ],
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "refresh": "30s"
+} 

@@ -7,116 +7,138 @@
   "panels": [
     {
       "id": 1,
-      "title": "HTTP Request Rate",
-      "type": "graph",
+      "title": "Service Health Status",
+      "type": "stat",
       "targets": [
         {
-          "expr": "rate(http_requests_total[5m])",
+          "expr": "up{job=~\"user-service|auth-service\"}",
           "refId": "A",
-          "legendFormat": "{{method}} {{handler}}"
+          "legendFormat": "{{job}}"
         }
       ],
-      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
-      "yAxes": [
-        {
-          "label": "Requests per second",
-          "min": 0
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "steps": [
+              {"color": "red", "value": 0},
+              {"color": "green", "value": 1}
+            ]
+          }
         }
-      ]
+      },
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0}
     },
     {
       "id": 2,
-      "title": "HTTP Response Time",
+      "title": "Service Uptime",
       "type": "graph",
       "targets": [
         {
-          "expr": "rate(http_request_duration_seconds_sum[5m]) / rate(http_request_duration_seconds_count[5m])",
+          "expr": "process_uptime_seconds{job=~\"user-service|auth-service\"}",
           "refId": "A",
-          "legendFormat": "{{method}} {{handler}}"
+          "legendFormat": "{{job}}"
         }
       ],
       "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
       "yAxes": [
         {
-          "label": "Response time (seconds)",
+          "label": "Uptime",
           "min": 0
         }
-      ]
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        }
+      }
     },
     {
       "id": 3,
-      "title": "HTTP Error Rate",
+      "title": "Memory Usage",
       "type": "graph",
       "targets": [
         {
-          "expr": "rate(http_requests_total{status=~\"4..|5..\"}[5m])",
+          "expr": "process_resident_memory_bytes{job=~\"user-service|auth-service\"} / 1024 / 1024",
           "refId": "A",
-          "legendFormat": "{{method}} {{handler}} {{status}}"
+          "legendFormat": "{{job}}"
         }
       ],
       "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
       "yAxes": [
         {
-          "label": "Errors per second",
+          "label": "Memory (MB)",
           "min": 0
         }
-      ]
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "MB"
+        }
+      }
     },
     {
       "id": 4,
-      "title": "Active Connections",
+      "title": "CPU Usage",
       "type": "graph",
       "targets": [
         {
-          "expr": "http_connections_active",
+          "expr": "rate(process_cpu_seconds_total{job=~\"user-service|auth-service\"}[5m]) * 100",
           "refId": "A",
-          "legendFormat": "{{instance}}"
+          "legendFormat": "{{job}}"
         }
       ],
       "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
       "yAxes": [
         {
-          "label": "Active connections",
-          "min": 0
+          "label": "CPU %",
+          "min": 0,
+          "max": 100
         }
       ]
     },
     {
       "id": 5,
-      "title": "Memory Usage",
+      "title": "Open File Descriptors",
       "type": "graph",
       "targets": [
         {
-          "expr": "process_resident_memory_bytes / 1024 / 1024",
+          "expr": "process_open_fds{job=~\"user-service|auth-service\"}",
           "refId": "A",
-          "legendFormat": "{{instance}}"
+          "legendFormat": "{{job}}"
         }
       ],
       "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16},
       "yAxes": [
         {
-          "label": "Memory (MB)",
+          "label": "Open FDs",
           "min": 0
         }
       ]
     },
     {
       "id": 6,
-      "title": "CPU Usage",
+      "title": "HTTP Requests (if available)",
       "type": "graph",
       "targets": [
         {
-          "expr": "rate(process_cpu_seconds_total[5m]) * 100",
+          "expr": "rate(http_requests_total{job=~\"user-service|auth-service\"}[5m])",
           "refId": "A",
-          "legendFormat": "{{instance}}"
+          "legendFormat": "{{job}}"
+        },
+        {
+          "expr": "rate(http_server_requests_seconds_count{job=~\"user-service|auth-service\"}[5m])",
+          "refId": "B",
+          "legendFormat": "{{job}} (server)"
         }
       ],
       "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16},
       "yAxes": [
         {
-          "label": "CPU %",
-          "min": 0,
-          "max": 100
+          "label": "Requests per second",
+          "min": 0
         }
       ]
     }
