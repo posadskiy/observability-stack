@@ -36,10 +36,24 @@ scrape_configs:
       - targets: ['promtail:9080']
     metrics_path: '/metrics'
 
-  # Example microservice - replace with your actual service
   - job_name: 'auth-service'
     static_configs:
-      - targets: [ 'localhost:8100' ]
+      - targets: [ 'auth-web:8100' ]
+    metrics_path: '/prometheus'
+    scrape_interval: 15s
+    scrape_timeout: 10s
+    # Add labels for better identification
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+      - source_labels: [__meta_kubernetes_pod_name]
+        target_label: pod
+      - source_labels: [__meta_kubernetes_namespace]
+        target_label: namespace
+        
+  - job_name: 'user-service'
+    static_configs:
+      - targets: [ 'user-web:8095' ]
     metrics_path: '/prometheus'
     scrape_interval: 15s
     scrape_timeout: 10s
