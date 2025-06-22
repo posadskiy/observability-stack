@@ -33,6 +33,26 @@ services:
       - observability-stack
     restart: unless-stopped
 
+  # Prometheus - Metrics collection and storage
+  prometheus:
+    image: prom/prometheus:v2.47.0
+    container_name: prometheus
+    ports:
+      - "9090:9090"
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+    volumes:
+      - ./config/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus-data:/prometheus
+    networks:
+      - observability-stack
+    restart: unless-stopped
+
   # Grafana - Visualization and dashboards
   grafana:
     image: grafana/grafana:10.1.0
@@ -52,6 +72,7 @@ services:
     depends_on:
       - loki
       - jaeger
+      - prometheus
     restart: unless-stopped
 
   # Promtail - Log collection agent (optional, for collecting logs from microservices)
@@ -78,6 +99,8 @@ volumes:
   loki-wal:
     driver: local
   jaeger-data:
+    driver: local
+  prometheus-data:
     driver: local
 
 # IMPORTANT: This network must also be used by your microservices' docker-compose file.
