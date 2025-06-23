@@ -4,6 +4,21 @@
   "tags": ["alerts", "monitoring"],
   "style": "dark",
   "timezone": "browser",
+  "templating": {
+    "list": [
+      {
+        "name": "service",
+        "type": "query",
+        "query": "label_values(up{job=~\"user-service|auth-service|email-service|email-template-service\"}, job)",
+        "refresh": 1,
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": false,
+        "label": "Service",
+        "description": "Select a service to filter the dashboard"
+      }
+    ]
+  },
   "panels": [
     {
       "id": 1,
@@ -11,7 +26,7 @@
       "type": "stat",
       "targets": [
         {
-          "expr": "count(ALERTS{alertstate=\"firing\"}) by (severity)",
+          "expr": "count(ALERTS{alertstate=\"firing\", job=~\"$service\"}) by (severity)",
           "refId": "A",
           "legendFormat": "{{severity}}"
         }
@@ -38,7 +53,7 @@
       "type": "stat",
       "targets": [
         {
-          "expr": "up{job=~\"user-service|auth-service|email-service|email-template-service\"}",
+          "expr": "up{job=~\"$service\"}",
           "refId": "A",
           "legendFormat": "{{job}}"
         }
@@ -64,7 +79,7 @@
       "type": "graph",
       "targets": [
         {
-          "expr": "rate(http_server_requests_seconds_count{job=~\"user-service|auth-service|email-service|email-template-service\"}[5m])",
+          "expr": "rate(http_server_requests_seconds_count{job=~\"$service\"}[5m])",
           "refId": "A",
           "legendFormat": "{{job}} - {{method}} {{uri}}"
         }
@@ -83,7 +98,7 @@
       "type": "graph",
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, rate(http_server_requests_seconds_bucket{job=~\"user-service|auth-service|email-service|email-template-service\"}[5m]))",
+          "expr": "histogram_quantile(0.95, rate(http_server_requests_seconds_bucket{job=~\"$service\"}[5m]))",
           "refId": "A",
           "legendFormat": "{{job}} - {{method}} {{uri}}"
         }
@@ -107,7 +122,7 @@
       "type": "graph",
       "targets": [
         {
-          "expr": "jvm_memory_used_bytes{job=~\"user-service|auth-service|email-service|email-template-service\", area=\"heap\"} / 1024 / 1024",
+          "expr": "jvm_memory_used_bytes{job=~\"$service\", area=\"heap\"} / 1024 / 1024",
           "refId": "A",
           "legendFormat": "{{job}} - {{id}}"
         }
@@ -131,12 +146,12 @@
       "type": "graph",
       "targets": [
         {
-          "expr": "jvm_threads_live_threads{job=~\"user-service|auth-service|email-service|email-template-service\"}",
+          "expr": "jvm_threads_live_threads{job=~\"$service\"}",
           "refId": "A",
           "legendFormat": "{{job}} - Live threads"
         },
         {
-          "expr": "jvm_threads_daemon_threads{job=~\"user-service|auth-service|email-service|email-template-service\"}",
+          "expr": "jvm_threads_daemon_threads{job=~\"$service\"}",
           "refId": "B",
           "legendFormat": "{{job}} - Daemon threads"
         }
@@ -155,17 +170,17 @@
       "type": "graph",
       "targets": [
         {
-          "expr": "hikaricp_connections_active{job=~\"user-service|auth-service|email-service|email-template-service\"}",
+          "expr": "hikaricp_connections_active{job=~\"$service\"}",
           "refId": "A",
           "legendFormat": "{{job}} - Active connections"
         },
         {
-          "expr": "hikaricp_connections_idle{job=~\"user-service|auth-service|email-service|email-template-service\"}",
+          "expr": "hikaricp_connections_idle{job=~\"$service\"}",
           "refId": "B",
           "legendFormat": "{{job}} - Idle connections"
         },
         {
-          "expr": "hikaricp_connections_max{job=~\"user-service|auth-service|email-service|email-template-service\"}",
+          "expr": "hikaricp_connections_max{job=~\"$service\"}",
           "refId": "C",
           "legendFormat": "{{job}} - Max connections"
         }
@@ -184,7 +199,7 @@
       "type": "graph",
       "targets": [
         {
-          "expr": "system_cpu_usage{job=~\"user-service|auth-service|email-service|email-template-service\"} * 100",
+          "expr": "system_cpu_usage{job=~\"$service\"} * 100",
           "refId": "A",
           "legendFormat": "{{job}}"
         }
@@ -204,7 +219,7 @@
       "type": "graph",
       "targets": [
         {
-          "expr": "rate(jvm_gc_pause_seconds_sum{job=~\"user-service|auth-service|email-service|email-template-service\"}[5m])",
+          "expr": "rate(jvm_gc_pause_seconds_sum{job=~\"$service\"}[5m])",
           "refId": "A",
           "legendFormat": "{{job}} - {{gc}}"
         }
@@ -228,7 +243,7 @@
       "type": "graph",
       "targets": [
         {
-          "expr": "rate(http_server_requests_seconds_count{job=~\"user-service|auth-service|email-service|email-template-service\", status=~\"4..|5..\"}[5m])",
+          "expr": "rate(http_server_requests_seconds_count{job=~\"$service\", status=~\"4..|5..\"}[5m])",
           "refId": "A",
           "legendFormat": "{{job}} - {{method}} {{uri}} {{status}}"
         }
@@ -247,7 +262,7 @@
       "type": "graph",
       "targets": [
         {
-          "expr": "rate(logback_events_total{job=~\"user-service|auth-service|email-service|email-template-service\"}[5m])",
+          "expr": "rate(logback_events_total{job=~\"$service\"}[5m])",
           "refId": "A",
           "legendFormat": "{{job}} - {{level}}"
         }
