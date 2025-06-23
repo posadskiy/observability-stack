@@ -1,7 +1,7 @@
 {
   "id": null,
   "title": "Alerts Overview",
-  "tags": ["alerts", "monitoring"],
+  "tags": ["alerts", "monitoring", "incidents"],
   "style": "dark",
   "timezone": "browser",
   "templating": {
@@ -16,17 +16,59 @@
         "multi": false,
         "label": "Service",
         "description": "Select a service to filter the dashboard"
+      },
+      {
+        "name": "severity",
+        "type": "query",
+        "query": "label_values(ALERTS, severity)",
+        "refresh": 1,
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": false,
+        "label": "Severity",
+        "description": "Filter by alert severity"
       }
     ]
   },
   "panels": [
     {
       "id": 1,
-      "title": "Active Alerts by Severity",
+      "title": "Active Alerts Count",
       "type": "stat",
       "targets": [
         {
-          "expr": "count(ALERTS{alertstate=\"firing\", job=~\"$service\"}) by (severity)",
+          "expr": "count(ALERTS{alertstate=\"firing\", job=~\"$service\", severity=~\"$severity\"})",
+          "refId": "A",
+          "legendFormat": "Total Active Alerts"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "steps": [
+              {"color": "green", "value": 0},
+              {"color": "yellow", "value": 1},
+              {"color": "red", "value": 5}
+            ]
+          },
+          "unit": "short",
+          "custom": {
+            "displayMode": "basic"
+          }
+        }
+      },
+      "gridPos": {"h": 4, "w": 6, "x": 0, "y": 0}
+    },
+    {
+      "id": 2,
+      "title": "Alerts by Severity",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "count(ALERTS{alertstate=\"firing\", job=~\"$service\", severity=~\"$severity\"}) by (severity)",
           "refId": "A",
           "legendFormat": "{{severity}}"
         }
@@ -42,13 +84,17 @@
               {"color": "yellow", "value": 1},
               {"color": "red", "value": 5}
             ]
+          },
+          "unit": "short",
+          "custom": {
+            "displayMode": "basic"
           }
         }
       },
-      "gridPos": {"h": 8, "w": 6, "x": 0, "y": 0}
+      "gridPos": {"h": 4, "w": 6, "x": 6, "y": 0}
     },
     {
-      "id": 2,
+      "id": 3,
       "title": "Service Health Status",
       "type": "stat",
       "targets": [
@@ -68,42 +114,124 @@
               {"color": "red", "value": 0},
               {"color": "green", "value": 1}
             ]
+          },
+          "unit": "short",
+          "custom": {
+            "displayMode": "basic"
           }
         }
       },
-      "gridPos": {"h": 8, "w": 6, "x": 6, "y": 0}
+      "gridPos": {"h": 4, "w": 6, "x": 12, "y": 0}
     },
     {
-      "id": 3,
-      "title": "HTTP Request Rate",
+      "id": 4,
+      "title": "Alert Resolution Rate",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "count(ALERTS{alertstate=\"resolved\", job=~\"$service\"}) / (count(ALERTS{alertstate=\"firing\", job=~\"$service\"}) + count(ALERTS{alertstate=\"resolved\", job=~\"$service\"})) * 100",
+          "refId": "A",
+          "legendFormat": "Resolution Rate %"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "thresholds": {
+            "steps": [
+              {"color": "red", "value": 0},
+              {"color": "yellow", "value": 50},
+              {"color": "green", "value": 80}
+            ]
+          },
+          "custom": {
+            "displayMode": "basic"
+          }
+        }
+      },
+      "gridPos": {"h": 4, "w": 6, "x": 18, "y": 0}
+    },
+    {
+      "id": 5,
+      "title": "Active Alerts Timeline",
       "type": "graph",
       "targets": [
         {
-          "expr": "rate(http_server_requests_seconds_count{job=~\"$service\"}[5m])",
+          "expr": "count(ALERTS{alertstate=\"firing\", job=~\"$service\", severity=~\"$severity\"}) by (alertname)",
           "refId": "A",
-          "legendFormat": "{{job}} - {{method}} {{uri}}"
+          "legendFormat": "{{alertname}}"
         }
       ],
-      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 4},
       "yAxes": [
         {
-          "label": "Requests per second",
+          "label": "Alert Count",
           "min": 0
         }
       ]
     },
     {
-      "id": 4,
-      "title": "HTTP Response Time (95th percentile)",
+      "id": 6,
+      "title": "Alert Duration",
       "type": "graph",
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, rate(http_server_requests_seconds_bucket{job=~\"$service\"}[5m]))",
+          "expr": "time() - ALERTS{alertstate=\"firing\", job=~\"$service\", severity=~\"$severity\"}",
           "refId": "A",
-          "legendFormat": "{{job}} - {{method}} {{uri}}"
+          "legendFormat": "{{alertname}} - {{job}}"
         }
       ],
-      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 4},
+      "yAxes": [
+        {
+          "label": "Duration (seconds)",
+          "min": 0
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        }
+      }
+    },
+    {
+      "id": 7,
+      "title": "Error Rate Alerts",
+      "type": "graph",
+      "targets": [
+        {
+          "expr": "rate(http_server_requests_seconds_count{job=~\"$service\", status=~\"4..|5..\"}[5m])",
+          "refId": "A",
+          "legendFormat": "{{job}} - {{method}} {{uri}} {{status}}"
+        }
+      ],
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 12},
+      "yAxes": [
+        {
+          "label": "Errors per second",
+          "min": 0
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "title": "Response Time Alerts",
+      "type": "graph",
+      "targets": [
+        {
+          "expr": "rate(http_server_requests_seconds_sum{job=~\"$service\"}[5m]) / rate(http_server_requests_seconds_count{job=~\"$service\"}[5m])",
+          "refId": "A",
+          "legendFormat": "{{job}} - {{method}} {{uri}} - Average"
+        },
+        {
+          "expr": "http_server_requests_seconds_max{job=~\"$service\"}",
+          "refId": "B",
+          "legendFormat": "{{job}} - {{method}} {{uri}} - Max"
+        }
+      ],
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 12},
       "yAxes": [
         {
           "label": "Response time (seconds)",
@@ -117,85 +245,33 @@
       }
     },
     {
-      "id": 5,
-      "title": "JVM Memory Usage",
+      "id": 9,
+      "title": "Memory Usage Alerts",
       "type": "graph",
       "targets": [
         {
-          "expr": "jvm_memory_used_bytes{job=~\"$service\", area=\"heap\"} / 1024 / 1024",
+          "expr": "jvm_memory_used_bytes{job=~\"$service\", area=\"heap\"} / jvm_memory_max_bytes{job=~\"$service\", area=\"heap\"} * 100",
           "refId": "A",
-          "legendFormat": "{{job}} - {{id}}"
+          "legendFormat": "{{job}} - {{id}} - Heap %"
         }
       ],
-      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 20},
       "yAxes": [
         {
-          "label": "Memory (MB)",
-          "min": 0
+          "label": "Memory Usage %",
+          "min": 0,
+          "max": 100
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "MB"
+          "unit": "percent"
         }
       }
     },
     {
-      "id": 6,
-      "title": "JVM Threads",
-      "type": "graph",
-      "targets": [
-        {
-          "expr": "jvm_threads_live_threads{job=~\"$service\"}",
-          "refId": "A",
-          "legendFormat": "{{job}} - Live threads"
-        },
-        {
-          "expr": "jvm_threads_daemon_threads{job=~\"$service\"}",
-          "refId": "B",
-          "legendFormat": "{{job}} - Daemon threads"
-        }
-      ],
-      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16},
-      "yAxes": [
-        {
-          "label": "Thread count",
-          "min": 0
-        }
-      ]
-    },
-    {
-      "id": 7,
-      "title": "Database Connection Pool",
-      "type": "graph",
-      "targets": [
-        {
-          "expr": "hikaricp_connections_active{job=~\"$service\"}",
-          "refId": "A",
-          "legendFormat": "{{job}} - Active connections"
-        },
-        {
-          "expr": "hikaricp_connections_idle{job=~\"$service\"}",
-          "refId": "B",
-          "legendFormat": "{{job}} - Idle connections"
-        },
-        {
-          "expr": "hikaricp_connections_max{job=~\"$service\"}",
-          "refId": "C",
-          "legendFormat": "{{job}} - Max connections"
-        }
-      ],
-      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16},
-      "yAxes": [
-        {
-          "label": "Connections",
-          "min": 0
-        }
-      ]
-    },
-    {
-      "id": 8,
-      "title": "System CPU Usage",
+      "id": 10,
+      "title": "CPU Usage Alerts",
       "type": "graph",
       "targets": [
         {
@@ -204,18 +280,47 @@
           "legendFormat": "{{job}}"
         }
       ],
-      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 24},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 20},
       "yAxes": [
         {
-          "label": "CPU %",
+          "label": "CPU Usage %",
           "min": 0,
           "max": 100
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent"
+        }
+      }
+    },
+    {
+      "id": 11,
+      "title": "Thread Count Alerts",
+      "type": "graph",
+      "targets": [
+        {
+          "expr": "jvm_threads_live_threads{job=~\"$service\"}",
+          "refId": "A",
+          "legendFormat": "{{job}} - Live threads"
+        },
+        {
+          "expr": "jvm_threads_peak_threads{job=~\"$service\"}",
+          "refId": "B",
+          "legendFormat": "{{job}} - Peak threads"
+        }
+      ],
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 28},
+      "yAxes": [
+        {
+          "label": "Thread count",
+          "min": 0
         }
       ]
     },
     {
-      "id": 9,
-      "title": "GC Pause Time",
+      "id": 12,
+      "title": "GC Pause Time Alerts",
       "type": "graph",
       "targets": [
         {
@@ -224,7 +329,7 @@
           "legendFormat": "{{job}} - {{gc}}"
         }
       ],
-      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 24},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 28},
       "yAxes": [
         {
           "label": "GC pause time per second",
@@ -238,39 +343,44 @@
       }
     },
     {
-      "id": 10,
-      "title": "HTTP Error Rate",
+      "id": 13,
+      "title": "Log Error Rate",
       "type": "graph",
       "targets": [
         {
-          "expr": "rate(http_server_requests_seconds_count{job=~\"$service\", status=~\"4..|5..\"}[5m])",
+          "expr": "rate(logback_events_total{job=~\"$service\", level=\"error\"}[5m])",
           "refId": "A",
-          "legendFormat": "{{job}} - {{method}} {{uri}} {{status}}"
+          "legendFormat": "{{job}} - Error logs"
+        },
+        {
+          "expr": "rate(logback_events_total{job=~\"$service\", level=\"warn\"}[5m])",
+          "refId": "B",
+          "legendFormat": "{{job}} - Warning logs"
         }
       ],
-      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 32},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 36},
       "yAxes": [
         {
-          "label": "Errors per second",
+          "label": "Log events per second",
           "min": 0
         }
       ]
     },
     {
-      "id": 11,
-      "title": "Log Events",
+      "id": 14,
+      "title": "Alert Frequency by Service",
       "type": "graph",
       "targets": [
         {
-          "expr": "rate(logback_events_total{job=~\"$service\"}[5m])",
+          "expr": "count(ALERTS{alertstate=\"firing\", job=~\"$service\", severity=~\"$severity\"}) by (job)",
           "refId": "A",
-          "legendFormat": "{{job}} - {{level}}"
+          "legendFormat": "{{job}}"
         }
       ],
-      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 32},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 36},
       "yAxes": [
         {
-          "label": "Log events per second",
+          "label": "Active Alerts",
           "min": 0
         }
       ]
