@@ -1,0 +1,434 @@
+{
+  "id": null,
+  "title": "Database Metrics",
+  "tags": ["database", "hikaricp", "connection-pool"],
+  "style": "dark",
+  "timezone": "browser",
+  "templating": {
+    "list": [
+      {
+        "name": "service",
+        "type": "query",
+        "query": "label_values(up{job=\"auth-service\"}, job)",
+        "refresh": 1,
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": false,
+        "label": "Service",
+        "description": "Select a service to filter the dashboard"
+      },
+      {
+        "name": "pool",
+        "type": "query",
+        "query": "label_values(hikaricp_connections_active{job=\"auth-service\"}, pool)",
+        "refresh": 1,
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": false,
+        "label": "Connection Pool",
+        "description": "Select a connection pool to filter the dashboard"
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Connection Pool Health",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "hikaricp_connections_active{job=\"auth-service\", pool=~\"$pool\"}",
+          "refId": "A",
+          "legendFormat": "{{pool}} - Active"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "steps": [
+              {"color": "green", "value": 0},
+              {"color": "yellow", "value": 5},
+              {"color": "red", "value": 8}
+            ]
+          },
+          "unit": "short",
+          "custom": {
+            "displayMode": "basic"
+          }
+        }
+      },
+      "gridPos": {"h": 4, "w": 6, "x": 0, "y": 0}
+    },
+    {
+      "id": 2,
+      "title": "Connection Pool Utilization",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "(hikaricp_connections_active{job=\"auth-service\", pool=~\"$pool\"} / hikaricp_connections_max{job=\"auth-service\", pool=~\"$pool\"}) * 100",
+          "refId": "A",
+          "legendFormat": "{{pool}} - Utilization %"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "thresholds": {
+            "steps": [
+              {"color": "green", "value": 0},
+              {"color": "yellow", "value": 70},
+              {"color": "red", "value": 90}
+            ]
+          },
+          "custom": {
+            "displayMode": "basic"
+          }
+        }
+      },
+      "gridPos": {"h": 4, "w": 6, "x": 6, "y": 0}
+    },
+    {
+      "id": 3,
+      "title": "Pending Connections",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "hikaricp_connections_pending{job=\"auth-service\", pool=~\"$pool\"}",
+          "refId": "A",
+          "legendFormat": "{{pool}} - Pending"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "steps": [
+              {"color": "green", "value": 0},
+              {"color": "yellow", "value": 1},
+              {"color": "red", "value": 5}
+            ]
+          },
+          "unit": "short",
+          "custom": {
+            "displayMode": "basic"
+          }
+        }
+      },
+      "gridPos": {"h": 4, "w": 6, "x": 12, "y": 0}
+    },
+    {
+      "id": 4,
+      "title": "Connection Timeouts",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "hikaricp_connections_timeout_total{job=\"auth-service\", pool=~\"$pool\"}",
+          "refId": "A",
+          "legendFormat": "{{pool}} - Timeouts"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "steps": [
+              {"color": "green", "value": 0},
+              {"color": "yellow", "value": 1},
+              {"color": "red", "value": 5}
+            ]
+          },
+          "unit": "short",
+          "custom": {
+            "displayMode": "basic"
+          }
+        }
+      },
+      "gridPos": {"h": 4, "w": 6, "x": 18, "y": 0}
+    },
+    {
+      "id": 5,
+      "title": "Connection Pool Status",
+      "type": "graph",
+      "targets": [
+        {
+          "expr": "hikaricp_connections_active{job=\"auth-service\", pool=~\"$pool\"}",
+          "refId": "A",
+          "legendFormat": "{{pool}} - Active"
+        },
+        {
+          "expr": "hikaricp_connections_idle{job=\"auth-service\", pool=~\"$pool\"}",
+          "refId": "B",
+          "legendFormat": "{{pool}} - Idle"
+        },
+        {
+          "expr": "hikaricp_connections_max{job=\"auth-service\", pool=~\"$pool\"}",
+          "refId": "C",
+          "legendFormat": "{{pool}} - Max"
+        },
+        {
+          "expr": "hikaricp_connections_min{job=\"auth-service\", pool=~\"$pool\"}",
+          "refId": "D",
+          "legendFormat": "{{pool}} - Min"
+        }
+      ],
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 4},
+      "yAxes": [
+        {
+          "label": "Connections",
+          "min": 0
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "Connection Pool Utilization %",
+      "type": "graph",
+      "targets": [
+        {
+          "expr": "(hikaricp_connections_active{job=\"auth-service\", pool=~\"$pool\"} / hikaricp_connections_max{job=\"auth-service\", pool=~\"$pool\"}) * 100",
+          "refId": "A",
+          "legendFormat": "{{pool}} - Utilization %"
+        }
+      ],
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 4},
+      "yAxes": [
+        {
+          "label": "Utilization %",
+          "min": 0,
+          "max": 100
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent"
+        }
+      }
+    },
+    {
+      "id": 7,
+      "title": "Connection Acquire Time",
+      "type": "graph",
+      "targets": [
+        {
+          "expr": "rate(hikaricp_connections_acquire_seconds_sum{job=\"auth-service\", pool=~\"$pool\"}[5m]) / rate(hikaricp_connections_acquire_seconds_count{job=\"auth-service\", pool=~\"$pool\"}[5m])",
+          "refId": "A",
+          "legendFormat": "{{pool}} - Average"
+        },
+        {
+          "expr": "hikaricp_connections_acquire_seconds_max{job=\"auth-service\", pool=~\"$pool\"}",
+          "refId": "B",
+          "legendFormat": "{{pool}} - Max"
+        }
+      ],
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 12},
+      "yAxes": [
+        {
+          "label": "Acquire time (seconds)",
+          "min": 0
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        }
+      }
+    },
+    {
+      "id": 8,
+      "title": "Connection Usage Time",
+      "type": "graph",
+      "targets": [
+        {
+          "expr": "rate(hikaricp_connections_usage_seconds_sum{job=\"auth-service\", pool=~\"$pool\"}[5m]) / rate(hikaricp_connections_usage_seconds_count{job=\"auth-service\", pool=~\"$pool\"}[5m])",
+          "refId": "A",
+          "legendFormat": "{{pool}} - Average"
+        },
+        {
+          "expr": "hikaricp_connections_usage_seconds_max{job=\"auth-service\", pool=~\"$pool\"}",
+          "refId": "B",
+          "legendFormat": "{{pool}} - Max"
+        }
+      ],
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 12},
+      "yAxes": [
+        {
+          "label": "Usage time (seconds)",
+          "min": 0
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        }
+      }
+    },
+    {
+      "id": 9,
+      "title": "Connection Creation Time",
+      "type": "graph",
+      "targets": [
+        {
+          "expr": "rate(hikaricp_connections_creation_seconds_sum{job=\"auth-service\", pool=~\"$pool\"}[5m]) / rate(hikaricp_connections_creation_seconds_count{job=\"auth-service\", pool=~\"$pool\"}[5m])",
+          "refId": "A",
+          "legendFormat": "{{pool}} - Average"
+        },
+        {
+          "expr": "hikaricp_connections_creation_seconds_max{job=\"auth-service\", pool=~\"$pool\"}",
+          "refId": "B",
+          "legendFormat": "{{pool}} - Max"
+        }
+      ],
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 20},
+      "yAxes": [
+        {
+          "label": "Creation time (seconds)",
+          "min": 0
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        }
+      }
+    },
+    {
+      "id": 10,
+      "title": "Connection Operations Rate",
+      "type": "graph",
+      "targets": [
+        {
+          "expr": "rate(hikaricp_connections_acquire_seconds_count{job=\"auth-service\", pool=~\"$pool\"}[5m])",
+          "refId": "A",
+          "legendFormat": "{{pool}} - Acquire rate"
+        },
+        {
+          "expr": "rate(hikaricp_connections_usage_seconds_count{job=\"auth-service\", pool=~\"$pool\"}[5m])",
+          "refId": "B",
+          "legendFormat": "{{pool}} - Usage rate"
+        },
+        {
+          "expr": "rate(hikaricp_connections_creation_seconds_count{job=\"auth-service\", pool=~\"$pool\"}[5m])",
+          "refId": "C",
+          "legendFormat": "{{pool}} - Creation rate"
+        }
+      ],
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 20},
+      "yAxes": [
+        {
+          "label": "Operations per second",
+          "min": 0
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "title": "Connection Timeouts Timeline",
+      "type": "graph",
+      "targets": [
+        {
+          "expr": "rate(hikaricp_connections_timeout_total{job=\"auth-service\", pool=~\"$pool\"}[5m])",
+          "refId": "A",
+          "legendFormat": "{{pool}} - Timeout rate"
+        }
+      ],
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 28},
+      "yAxes": [
+        {
+          "label": "Timeouts per second",
+          "min": 0
+        }
+      ]
+    },
+    {
+      "id": 12,
+      "title": "Pending Connections Timeline",
+      "type": "graph",
+      "targets": [
+        {
+          "expr": "hikaricp_connections_pending{job=\"auth-service\", pool=~\"$pool\"}",
+          "refId": "A",
+          "legendFormat": "{{pool}} - Pending"
+        }
+      ],
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 28},
+      "yAxes": [
+        {
+          "label": "Pending connections",
+          "min": 0
+        }
+      ]
+    },
+    {
+      "id": 13,
+      "title": "Database Performance Indicators",
+      "type": "graph",
+      "targets": [
+        {
+          "expr": "rate(http_server_requests_seconds_count{job=\"auth-service\", status=~\"5..\"}[5m])",
+          "refId": "A",
+          "legendFormat": "{{method}} {{uri}} - 5xx errors"
+        },
+        {
+          "expr": "rate(http_server_requests_seconds_sum{job=\"auth-service\"}[5m]) / rate(http_server_requests_seconds_count{job=\"auth-service\"}[5m])",
+          "refId": "B",
+          "legendFormat": "Average response time"
+        }
+      ],
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 36},
+      "yAxes": [
+        {
+          "label": "Rate / Time",
+          "min": 0
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        }
+      }
+    },
+    {
+      "id": 14,
+      "title": "JVM Memory Impact",
+      "type": "graph",
+      "targets": [
+        {
+          "expr": "jvm_memory_used_bytes{job=\"auth-service\", area=\"heap\"} / 1024 / 1024",
+          "refId": "A",
+          "legendFormat": "{{id}} - Heap (MB)"
+        },
+        {
+          "expr": "jvm_memory_used_bytes{job=\"auth-service\", area=\"nonheap\"} / 1024 / 1024",
+          "refId": "B",
+          "legendFormat": "{{id}} - Non-heap (MB)"
+        }
+      ],
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 36},
+      "yAxes": [
+        {
+          "label": "Memory (MB)",
+          "min": 0
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "MB"
+        }
+      }
+    }
+  ],
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "refresh": "30s"
+} 
