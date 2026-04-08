@@ -1,0 +1,213 @@
+// Grafana Alloy — Costy pipeline (reference copy; Helm embeds the same in values.yaml).
+// K8s env: GRAFANA_OBSERVABILITY_USER_TOKEN (Loki/Mimir), GRAFANA_OBSERVABILITY_OTLP_TOKEN (OTLP traces),
+//          GRAFANA_CLOUD_OTLP_USER (OpenTelemetry Instance ID, e.g. 1586681).
+// Tuned for low traffic / small nodes.
+
+logging {
+  level  = "info"
+  format = "logfmt"
+}
+
+discovery.kubernetes "costy_pods" {
+  role = "pod"
+  namespaces { names = ["costy"] }
+}
+
+discovery.relabel "costy_metrics" {
+  targets = discovery.kubernetes.costy_pods.targets
+
+  rule {
+    source_labels = ["__meta_kubernetes_pod_annotation_prometheus_io_scrape"]
+    action        = "keep"
+    regex         = "true"
+  }
+  rule {
+    source_labels = ["__meta_kubernetes_pod_annotation_prometheus_io_path"]
+    action        = "replace"
+    target_label  = "__metrics_path__"
+    regex         = "(.+)"
+  }
+  rule {
+    source_labels = ["__address__", "__meta_kubernetes_pod_annotation_prometheus_io_port"]
+    action        = "replace"
+    regex         = "([^:]+)(?:\\d+)?;(\\d+)"
+    replacement   = "$1:$2"
+    target_label  = "__address__"
+  }
+  rule {
+    source_labels = ["__meta_kubernetes_namespace"]
+    target_label  = "namespace"
+  }
+  rule {
+    source_labels = ["__meta_kubernetes_pod_name"]
+    target_label  = "pod"
+  }
+  rule {
+    source_labels = ["__meta_kubernetes_pod_label_app"]
+    target_label  = "service"
+  }
+  rule {
+    source_labels = ["__meta_kubernetes_pod_container_name"]
+    target_label  = "container"
+  }
+}
+
+prometheus.scrape "costy" {
+  targets         = discovery.relabel.costy_metrics.output
+  forward_to      = [prometheus.remote_write.grafana_cloud.receiver]
+  scrape_interval = "60s"
+  scrape_timeout  = "8s"
+}
+
+prometheus.remote_write "grafana_cloud" {
+  endpoint {
+    url = "https://prometheus-prod-65-prod-eu-west-2.grafana.net/api/prom/push"
+    basic_auth {
+      username = "3097590"
+      password = sys.env("GRAFANA_OBSERVABILITY_USER_TOKEN")
+    }
+  }
+  external_labels = {
+    cluster = "k3s-prod",
+    env     = "production",
+  }
+}
+
+discovery.kubernetes "costy_pods_logs" {
+  role = "pod"
+  namespaces { names = ["costy"] }
+}
+
+discovery.relabel "costy_logs" {
+  targets = discovery.kubernetes.costy_pods_logs.targets
+
+  rule {
+    source_labels = ["__meta_kubernetes_namespace"]
+    target_label  = "namespace"
+  }
+  rule {
+    source_labels = ["__meta_kubernetes_pod_name"]
+    target_label  = "pod"
+  }
+  rule {
+    source_labels = ["__meta_kubernetes_pod_label_app"]
+    target_label  = "service"
+  }
+  rule {
+    source_labels = ["__meta_kubernetes_pod_container_name"]
+    target_label  = "container"
+  }
+  rule {
+    source_labels = ["__meta_kubernetes_pod_node_name"]
+    target_label  = "node"
+  }
+}
+
+loki.source.kubernetes "costy" {
+  targets    = discovery.relabel.costy_logs.output
+  forward_to = [loki.process.costy.receiver]
+}
+
+loki.process "costy" {
+  // Grafana Cloud rejects lines past ~7d; k8s/API can replay older JSON @timestamp lines.
+  stage.drop {
+    older_than          = "120h"
+    drop_counter_reason = "timestamp_exceeds_cloud_ingest_window"
+  }
+
+  // ── Backend services (Java / Logstash JSON) ───────────────────────────────
+  stage.match {
+    selector = `{service!="cost-accounting-frontend"}`
+
+    stage.json {
+      expressions = {
+        level    = "level",
+        trace_id = "mdc.traceId",
+        span_id  = "mdc.spanId",
+      }
+    }
+    stage.labels {
+      values = { level = "level" }
+    }
+    stage.structured_metadata {
+      values = {
+        traceId = "trace_id",
+        spanId  = "span_id",
+      }
+    }
+    stage.drop {
+      expression          = ".*GET /health.*"
+      drop_counter_reason = "healthcheck_probe"
+    }
+  }
+
+  // ── Frontend Nginx (JSON access log) ─────────────────────────────────────
+  stage.match {
+    selector = `{service="cost-accounting-frontend"}`
+
+    stage.json {
+      expressions = {
+        status   = "status",
+        method   = "method",
+        uri      = "uri",
+        duration = "duration",
+      }
+    }
+    // Expose HTTP status as a stream label for easy filtering (status=~"5..")
+    stage.labels {
+      values = { status = "status" }
+    }
+    stage.structured_metadata {
+      values = {
+        method   = "method",
+        uri      = "uri",
+        duration = "duration",
+      }
+    }
+    stage.drop {
+      expression          = ".*/health.*"
+      drop_counter_reason = "healthcheck_probe"
+    }
+  }
+
+  forward_to = [loki.write.grafana_cloud.receiver]
+}
+
+loki.write "grafana_cloud" {
+  endpoint {
+    url = "https://logs-prod-012.grafana.net/loki/api/v1/push"
+    basic_auth {
+      username = "1544470"
+      password = sys.env("GRAFANA_OBSERVABILITY_USER_TOKEN")
+    }
+  }
+  external_labels = {
+    cluster = "k3s-prod",
+    env     = "production",
+  }
+}
+
+otelcol.receiver.otlp "default" {
+  grpc { endpoint = "0.0.0.0:4317" }
+  http { endpoint = "0.0.0.0:4318" }
+  output { traces = [otelcol.processor.batch.default.input] }
+}
+
+otelcol.processor.batch "default" {
+  timeout             = "10s"
+  send_batch_size     = 256
+  send_batch_max_size = 512
+  output { traces = [otelcol.exporter.otlphttp.grafana_cloud.input] }
+}
+
+otelcol.auth.basic "grafana_cloud" {
+  username = sys.env("GRAFANA_CLOUD_OTLP_USER")
+  password = sys.env("GRAFANA_OBSERVABILITY_OTLP_TOKEN")
+}
+
+otelcol.exporter.otlphttp "grafana_cloud" {
+  client {
+    endpoint = "https://otlp-gateway-prod-eu-west-2.grafana.net/otlp"
+    auth     = otelcol.auth.basic.grafana_cloud.handler
+  }
+}

@@ -1,286 +1,208 @@
-# Observability Stack for Local Development
+# Observability Stack — Costy
 
-This repository contains a Docker Compose setup for local development with centralized logging using Loki and Grafana for visualization, distributed tracing with Jaeger, and metrics collection with Prometheus.
+Grafana Cloud free tier observability for the costy backend (k3s + Micronaut 4 + Java 25).
 
-## Components
+## Architecture
 
-- **Loki**: Centralized log storage and aggregation
-- **Grafana**: Visualization and dashboards for logs, traces, and metrics
-- **Promtail**: Log collection agent (collects logs from Docker containers)
-- **Jaeger**: Distributed tracing system
-- **Prometheus**: Metrics collection and storage
-
-## Quick Start
-
-1. **Start the stack:**
-   ```bash
-   docker-compose -f docker-compose.dev.yaml up -d
-   ```
-
-2. **Access the services:**
-   - **Grafana**: http://localhost:3000 (admin/admin)
-   - **Loki**: http://localhost:3100
-   - **Jaeger UI**: http://localhost:16686
-   - **Prometheus**: http://localhost:9090
-
-3. **View logs in Grafana:**
-   - Navigate to Explore in Grafana
-   - Select Loki as the data source
-   - Use queries like `{job="docker"}` to view all container logs
-   - Use `{job="docker"} |= "error"` to filter error logs
-
-4. **View traces in Grafana:**
-   - Navigate to Explore in Grafana
-   - Select Jaeger as the data source
-   - Use the trace query interface to search for traces
-   - View the "Tracing Overview" dashboard
-
-5. **View traces in Jaeger UI:**
-   - Go to http://localhost:16686
-   - Search for traces by service name, operation, or tags
-   - View trace details and dependencies
-
-6. **View metrics in Grafana:**
-   - Navigate to Dashboards in Grafana
-   - View "Observability Stack Overview" and "Application Metrics" dashboards
-   - Or go to Explore and select Prometheus data source to query metrics directly
-
-7. **View metrics in Prometheus:**
-   - Go to http://localhost:9090
-   - Use the query interface to explore metrics
-   - View targets to see what's being scraped
-
-## Configuration
-
-### Loki Configuration
-- Located in `config/loki/local-config.yaml`
-- Configured for local development with file-based storage
-- Log retention: 31 days (744 hours)
-
-### Promtail Configuration
-- Located in `config/promtail/config.yml`
-- Collects logs from Docker containers and system logs
-- Automatically parses JSON logs from Docker
-
-### Grafana Configuration
-- Auto-provisioned Loki and Jaeger data sources
-- Sample dashboards for log and trace visualization
-- Default credentials: admin/admin
-
-### Jaeger Configuration
-- All-in-one deployment with collector, query, and storage
-- Supports multiple protocols: Thrift, gRPC, HTTP, OTLP
-- In-memory storage for development (use external storage for production)
-
-### Prometheus Configuration
-- Located in `config/prometheus/prometheus.yml`
-- Scrapes metrics from all observability stack components
-- Automatically configured to scrape application metrics
-- Data retention: 200 hours (8+ days)
-- Scrape interval: 15 seconds (configurable per job)
-
-## Adding Your Microservices
-
-To add your microservices to this stack:
-
-1. **Add your service to docker-compose.dev.yaml:**
-   ```yaml
-   your-service:
-     image: your-service-image
-     container_name: your-service
-     ports:
-       - "8081:8080"
-     logging:
-       driver: "json-file"
-       options:
-         max-size: "10m"
-         max-file: "3"
-     networks:
-       - observability-stack
-     restart: unless-stopped
-   ```
-
-2. **Ensure your service logs to stdout/stderr** (Docker will capture these automatically)
-
-3. **Add metrics to your service** using Prometheus client libraries:
-   ```python
-   from prometheus_client import Counter, Histogram, generate_latest
-   
-   # Define metrics
-   REQUEST_COUNT = Counter('http_requests_total', 'Total HTTP requests', ['method', 'endpoint'])
-   REQUEST_LATENCY = Histogram('http_request_duration_seconds', 'HTTP request latency')
-   
-   # Expose metrics endpoint
-   @app.route('/metrics')
-   def metrics():
-       return generate_latest()
-   ```
-
-4. **Add tracing to your service** using OpenTelemetry:
-   ```python
-   from opentelemetry import trace
-   from opentelemetry.exporter.jaeger.thrift import JaegerExporter
-   from opentelemetry.sdk.trace import TracerProvider
-   from opentelemetry.sdk.trace.export import BatchSpanProcessor
-   
-   # Initialize tracing
-   trace.set_tracer_provider(TracerProvider())
-   jaeger_exporter = JaegerExporter(
-       agent_host_name="jaeger",
-       agent_port=6831,
-   )
-   trace.get_tracer_provider().add_span_processor(
-       BatchSpanProcessor(jaeger_exporter)
-   )
-   ```
-
-5. **View logs in Grafana** using queries like:
-   - `{container_name="your-service"}` - View logs from your specific service
-   - `{container_name="your-service"} |= "error"` - View error logs from your service
-
-6. **View metrics in Grafana** using the Application Metrics dashboard or custom queries:
-   - `rate(http_requests_total[5m])` - Request rate
-   - `rate(http_request_duration_seconds_sum[5m]) / rate(http_request_duration_seconds_count[5m])` - Average response time
-
-7. **View traces in Jaeger** by searching for your service name
-
-## Testing the Tracing Setup
-
-1. **Start the stack:**
-   ```bash
-   docker-compose -f docker-compose.dev.yaml up -d
-   ```
-
-2. **Add your own service** with OpenTelemetry instrumentation
-
-3. **Generate some traffic** to your service
-
-4. **View traces:**
-   - Open http://localhost:16686 (Jaeger UI)
-   - Search for your service name
-   - View trace details and dependencies
-
-5. **View traces in Grafana:**
-   - Open http://localhost:3000
-   - Go to Explore
-   - Select Jaeger data source
-   - Search for traces
-
-## Useful Log Queries
-
-### Basic Queries
-- `{job="docker"}` - All container logs
-- `{container_name="service-name"}` - Logs from specific container
-- `{job="docker"} |= "error"` - Error logs
-- `{job="docker"} |= "warn"` - Warning logs
-
-### Advanced Queries
-- `{job="docker"} |= "error" | json` - Parse JSON error logs
-- `{job="docker"} |~ "(?i)exception|error|fail"` - Case-insensitive error matching
-- `{job="docker"} | json | level="error"` - JSON logs with error level
-
-## Useful Trace Queries
-
-### In Jaeger UI
-- Service: `your-service-name` - View all traces from your service
-- Operation: `operation-name` - View specific operations
-- Tags: `error=true` - View traces with errors
-
-### In Grafana
-- Use the Jaeger data source to query traces
-- View the "Tracing Overview" dashboard for metrics
-
-## Useful Metrics Queries
-
-### Basic Metrics
-- `up` - Service health status (1 = up, 0 = down)
-- `up{job="your-service"}` - Health status for specific service
-- `scrape_duration_seconds` - How long Prometheus takes to scrape each target
-
-### Application Metrics
-- `rate(http_requests_total[5m])` - Request rate over 5 minutes
-- `rate(http_requests_total{status=~"4..|5.."}[5m])` - Error rate (4xx/5xx responses)
-- `histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m]))` - 95th percentile response time
-- `process_cpu_seconds_total` - CPU usage
-- `process_resident_memory_bytes / 1024 / 1024` - Memory usage in MB
-
-### Observability Stack Metrics
-- `prometheus_tsdb_head_samples_appended_total` - Prometheus samples ingested
-- `loki_build_info` - Loki version information
-- `jaeger_build_info` - Jaeger version information
-- `grafana_build_info` - Grafana version information
-
-### Advanced Queries
-- `sum(rate(http_requests_total[5m])) by (method, endpoint)` - Request rate by method and endpoint
-- `increase(http_requests_total[1h])` - Total requests in the last hour
-- `rate(http_request_duration_seconds_sum[5m]) / rate(http_request_duration_seconds_count[5m])` - Average response time
-
-## Stopping the Stack
-
-```bash
-docker-compose -f docker-compose.dev.yaml down
+```
+costy services (costy namespace)
+  │  metrics → /prometheus endpoint
+  │  traces  → OTLP gRPC :4317
+  │  logs    → stdout (JSON via LogstashEncoder)
+  ▼
+Grafana Alloy (observability namespace)
+  │  scrapes /prometheus every 15s   → Grafana Cloud Mimir  (metrics)
+  │  streams pod logs via k8s API    → Grafana Cloud Loki   (logs)
+  │  receives OTLP traces            → Grafana Cloud Tempo  (traces)
+  ▼
+Grafana Cloud (eu-west-2)
+  └── grafana.net dashboard
 ```
 
-To remove volumes (this will delete all stored logs and traces):
+## Prerequisites
+
+- `kubectl` configured for the k3s cluster
+- `helm` 3+
+- `envsubst` (gettext) — same as other repos’ `k8s/secrets.yaml` flow
+- `GRAFANA_OBSERVABILITY_USER_TOKEN` — Cloud Access Policy token (`glc_`) for **Loki + Mimir** (remote_write / push)
+- `GRAFANA_OBSERVABILITY_OTLP_TOKEN` — separate `glc_` token for **OTLP** trace ingest (from Grafana → OpenTelemetry → Configure)
+
+Secrets: `k8s/secrets.yaml` maps `token` and `otlpToken`; `deploy.sh` runs `envsubst` on both variables.
+
 ```bash
-docker-compose -f docker-compose.dev.yaml down -v
+export GRAFANA_OBSERVABILITY_USER_TOKEN=glc_...
+export GRAFANA_OBSERVABILITY_OTLP_TOKEN=glc_...
 ```
 
-## Troubleshooting
+## Deploy Grafana Alloy
 
-### Grafana can't connect to Loki or Jaeger
-- Ensure all services are running: `docker-compose -f docker-compose.dev.yaml ps`
-- Check service logs: `docker-compose -f docker-compose.dev.yaml logs <service-name>`
-- Verify services are accessible: 
-  - `curl http://localhost:3100/ready` (Loki)
-  - `curl http://localhost:16686/api/services` (Jaeger)
+```bash
+./deploy.sh
+```
 
-### No traces appearing
-- Check if your service is properly instrumented with OpenTelemetry
-- Verify the Jaeger exporter is configured correctly
-- Check Jaeger logs: `docker-compose -f docker-compose.dev.yaml logs jaeger`
+Alloy starts collecting logs immediately (no service rebuild needed for logs).
 
-### No metrics appearing
-- Check Prometheus targets: http://localhost:9090/targets
-- Verify your service exposes metrics at `/metrics` endpoint
-- Check Prometheus logs: `docker-compose -f docker-compose.dev.yaml logs prometheus`
-- Ensure your service is in the same Docker network as Prometheus
-- Verify the service is configured in `config/prometheus/prometheus.yml`
+## Costy backend (already wired)
 
-### No logs appearing
-- Check Promtail logs: `docker-compose -f docker-compose.dev.yaml logs promtail`
-- Verify containers are generating logs
-- Check if logs are being written to stdout/stderr in your containers
+The **costy** repo (`cost-accounting-backend`) already includes Micrometer, Prometheus scrape annotations, and OTel env vars on deployments.
 
-### Performance Issues
-- For high log volume, consider adjusting Loki's configuration
-- Monitor disk usage of the `loki-data` and `jaeger-data` volumes
-- Consider increasing log rotation settings in your services
+Rebuild and redeploy when you change dependencies or config:
 
-## Customization
+```bash
+cd ../costy/cost-accounting-backend
+./mvnw clean package -DskipTests
+kubectl rollout restart deployment -n costy
+```
 
-### Adding Custom Dashboards
-1. Create JSON dashboard files in `config/grafana/dashboards/`
-2. Restart Grafana or wait for auto-reload
-3. Dashboards will appear in Grafana's dashboard list
+## Grafana Cloud endpoints
 
-### Modifying Log Collection
-- Edit `config/promtail/config.yml` to add custom log sources
-- Add volume mounts for custom log directories
-- Configure custom log parsing pipelines
+| Signal | URL | Instance ID |
+|---|---|---|
+| Metrics (Mimir) | `https://prometheus-prod-65-prod-eu-west-2.grafana.net/api/prom/push` | `3097590` |
+| Logs (Loki) | `https://logs-prod-012.grafana.net/loki/api/v1/push` | `1544470` |
+| Traces ingest (OTLP HTTP via Alloy) | `https://otlp-gateway-prod-eu-west-2.grafana.net/otlp` (path `/v1/traces` appended by Alloy) | instance ID from stack **OpenTelemetry** tile (Basic auth user) |
 
-### Loki Configuration
-- Modify `config/loki/local-config.yaml` for different storage backends
-- Adjust retention periods and chunk settings
-- Configure authentication if needed
+## Frontend observability
 
-### Jaeger Configuration
-- Modify environment variables for different storage backends
-- Configure sampling rates for production use
-- Add authentication and security settings 
+### Grafana Faro RUM (Real User Monitoring)
 
-### Prometheus Configuration
-- Edit `config/prometheus/prometheus.yml` to add new scrape targets
-- Configure alerting rules in separate rule files
-- Adjust retention periods and scrape intervals
-- Add custom relabeling rules for better metric organization 
+The `costy-frontend` React app ships `@grafana/faro-web-sdk` and `@grafana/faro-web-tracing`.
+
+**One-time Grafana Cloud setup:**
+
+1. Grafana Cloud → **Frontend Observability** → **Add new app** → name `costy`.
+2. The Faro collector URL is already hardcoded in `build-and-push.sh` — no extra steps needed.
+3. For de-obfuscated stack traces, set `GRAFANA_OBSERVABILITY_FARO_TOKEN` before running the build script  
+   (Grafana Cloud → Access Policies → `faro-observability-token` → Add token):
+
+```bash
+export GRAFANA_OBSERVABILITY_FARO_TOKEN=glc_...
+./deployment/scripts/build-and-push.sh <version>
+```
+
+Without the token the build still succeeds; source maps are simply not uploaded and stack traces
+in error reports show minified code. All other RUM functionality is unaffected.
+
+**What you get:**
+- Core Web Vitals (LCP, CLS, INP) per page route in **Grafana Cloud → Frontend Observability**
+- JS errors with stack traces grouped by fingerprint
+- Console errors captured as Faro log events
+- W3C `traceparent` header injected into every `fetch`/XHR → backend Micronaut spans are
+  linked to the browser trace root in **Explore → Tempo**
+
+---
+
+### Nginx access logs (costy-frontend)
+
+`nginx.prod.conf` now writes structured JSON to stdout. Alloy's existing `costy` log pipeline
+picks up the frontend pod automatically (same `costy` namespace). Nginx logs are processed by a
+dedicated `stage.match` block that:
+
+- Parses `status`, `method`, `uri`, `duration` fields
+- Exposes `status` as a Loki stream label (filter: `{status=~"5.."}`)
+- Drops `/health` probe lines
+
+Query in **Grafana Cloud → Explore → Loki:**
+
+```logql
+{namespace="costy", service="cost-accounting-frontend"} | status =~ "5.."
+```
+
+```logql
+rate({namespace="costy", service="cost-accounting-frontend"}[5m])
+```
+
+---
+
+### Synthetic Monitoring (uptime checks)
+
+Grafana Cloud Synthetic Monitoring runs probes from multiple regions every minute with no
+in-cluster agent required for HTTP checks.
+
+**Setup (one-time, in Grafana Cloud UI):**
+
+1. Grafana Cloud → **Synthetic Monitoring** → **Add check** → **HTTP**.
+2. Create the following checks:
+
+| Check | URL | Expected | Alert threshold |
+|-------|-----|----------|----------------|
+| Frontend up | `https://<your-domain>/` | Status 200, body contains `<div id="root">` | Uptime < 99% |
+| Frontend health | `https://<your-domain>/health` | Status 200, body `healthy` | Any failure |
+| Auth service | `https://<your-domain>/api/auth/health` | Status 200 | Any failure |
+
+3. For each check enable **TLS certificate expiry** alert (default: warn at 30 days).
+4. Set **alert policy** → notify on 2 consecutive failures (~2 min detection time).
+
+**Where to see results:** Grafana Cloud → Synthetic Monitoring → built-in dashboard shows
+uptime %, response time history, and probe map by region.
+
+---
+
+## Verifying data flow
+
+**Logs** (after Alloy deploy):
+
+```
+Grafana Cloud → Explore → Loki → {namespace="costy"}
+```
+
+**Metrics** (after service rebuild + redeploy):
+
+```
+Grafana Cloud → Explore → Prometheus → jvm_memory_used_bytes{namespace="costy"}
+```
+
+**Traces**:
+
+```
+Grafana Cloud → Explore → Tempo → search by service name
+```
+
+**Alloy:**
+
+```bash
+kubectl get pods -n observability
+kubectl logs -n observability -l app.kubernetes.io/name=alloy -f
+```
+
+## Free tier limits
+
+| Resource | Limit | Estimated usage |
+|---|---|---|
+| Metrics series | 10,000 | ~8,000 (4 services + JVM) |
+| Logs | 50 GB/month | ~25 GB/month at INFO level |
+| Traces | 50 GB/month | ~10 GB/month at 20% sampling |
+| Retention | 14 days | — |
+
+## Low-resource tuning
+
+Defaults assume a **small k3s node and low request volume**:
+
+| Area | Setting |
+|------|---------|
+| Alloy CPU/RAM | requests `25m` / `64Mi`, limits `200m` / `256Mi` |
+| Config reloader | requests `5m` / limits `50m`, memory `16Mi` / `32Mi` |
+| Prometheus scrape | every **60s** (was 15s) — less CPU and remote-write churn |
+| Trace batches | smaller buffers (`send_batch_size` 256, max 512) |
+| Alloy self-logging | level **info** (`warn` makes `kubectl logs` look empty when healthy) |
+| Usage reporting | `enableReporting: false` |
+
+If Alloy OOMs or scrapes time out, raise `alloy.resources.limits.memory` slightly (e.g. to `320Mi`) or increase `scrape_timeout`.
+
+**Grafana Cloud Loki `400` / “timestamp too old”:** Hosted Loki only accepts log lines within a recent window (~7 days past the line timestamp). Kubernetes log streaming can replay lines with old `@timestamp` in JSON; the `loki.process` pipeline drops entries older than **120h** before push. Increase or decrease `older_than` in `helm/alloy/values.yaml` if your stack’s limit differs.
+
+**`env()` deprecation warnings:** Config uses `sys.env(...)` (e.g. `GRAFANA_OBSERVABILITY_USER_TOKEN`, `GRAFANA_OBSERVABILITY_OTLP_TOKEN`) instead of deprecated `env(...)`.
+
+## Repo layout
+
+```
+observability-stack/
+├── README.md
+├── .env.example
+├── deploy.sh
+├── config/alloy/config.alloy   # mirror of Helm config (edit helm/alloy/values.yaml to change)
+├── helm/alloy/values.yaml
+└── k8s/
+    ├── namespace.yaml
+    └── secrets.yaml           # token + otlpToken via envsubst
+```
