@@ -97,6 +97,16 @@ else
 fi
 
 echo ""
+echo "==> Rolling out $HELM_RELEASE deployment..."
+if [[ "$DRY_RUN" == "true" ]]; then
+  echo "    [dry-run] kubectl rollout restart deployment/$HELM_RELEASE -n $NAMESPACE"
+else
+  kubectl rollout restart deployment/"$HELM_RELEASE" -n "$NAMESPACE"
+  kubectl rollout status deployment/"$HELM_RELEASE" -n "$NAMESPACE" --timeout=120s
+  echo "    Rollout complete."
+fi
+
+echo ""
 echo "✓ Grafana Alloy deployed to namespace: $NAMESPACE"
 echo ""
 echo "Next:"
