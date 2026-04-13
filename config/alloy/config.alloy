@@ -10,7 +10,7 @@ logging {
 
 discovery.kubernetes "costy_pods" {
   role = "pod"
-  namespaces { names = ["costy"] }
+  namespaces { names = ["costy", "microservices"] }
 }
 
 discovery.relabel "costy_metrics" {
@@ -75,7 +75,7 @@ prometheus.remote_write "grafana_cloud" {
 
 discovery.kubernetes "costy_pods_logs" {
   role = "pod"
-  namespaces { names = ["costy"] }
+  namespaces { names = ["costy", "microservices"] }
 }
 
 discovery.relabel "costy_logs" {

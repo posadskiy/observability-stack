@@ -5,7 +5,7 @@ Grafana Cloud free tier observability for the costy backend (k3s + Micronaut 4 +
 ## Architecture
 
 ```
-costy services (costy namespace)
+costy services (costy namespace) + microservices (microservices namespace)
   │  metrics → /prometheus endpoint
   │  traces  → OTLP gRPC :4317
   │  logs    → stdout (JSON via LogstashEncoder)
@@ -41,6 +41,8 @@ export GRAFANA_OBSERVABILITY_OTLP_TOKEN=glc_...
 ```
 
 Alloy starts collecting logs immediately (no service rebuild needed for logs).
+
+**Namespaces in Alloy:** `discovery.kubernetes` is restricted to an explicit list (see `config/alloy/config.alloy` and `helm/alloy/values.yaml`). Today that list includes **`costy`** and **`microservices`**. Pods in any other namespace are not shipped to Loki/Mimir until you add that namespace there and redeploy Alloy.
 
 ## Costy backend (already wired)
 
@@ -144,12 +146,14 @@ uptime %, response time history, and probe map by region.
 
 ```
 Grafana Cloud → Explore → Loki → {namespace="costy"}
+Grafana Cloud → Explore → Loki → {namespace="microservices"}
 ```
 
 **Metrics** (after service rebuild + redeploy):
 
 ```
 Grafana Cloud → Explore → Prometheus → jvm_memory_used_bytes{namespace="costy"}
+Grafana Cloud → Explore → Prometheus → jvm_memory_used_bytes{namespace="microservices"}
 ```
 
 **Traces**:

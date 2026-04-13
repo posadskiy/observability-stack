@@ -35,7 +35,7 @@ alloy:
       discovery.kubernetes "costy_pods" {
         role = "pod"
         namespaces {
-          names = ["costy"]
+          names = ["costy", "microservices"]
         }
       }
 
@@ -103,7 +103,7 @@ alloy:
       discovery.kubernetes "costy_pods_logs" {
         role = "pod"
         namespaces {
-          names = ["costy"]
+          names = ["costy", "microservices"]
         }
       }
 
