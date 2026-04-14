@@ -1,32 +1,61 @@
-// Grafana Alloy — Costy pipeline (reference copy; Helm embeds the same in values.yaml).
-// K8s env: GRAFANA_OBSERVABILITY_USER_TOKEN (Loki/Mimir), GRAFANA_OBSERVABILITY_OTLP_TOKEN (OTLP traces),
+// Grafana Alloy — multi-namespace observability pipeline
+// K8s env: GRAFANA_OBSERVABILITY_USER_TOKEN (Loki + Mimir), GRAFANA_OBSERVABILITY_OTLP_TOKEN (OTLP traces),
 //          GRAFANA_CLOUD_OTLP_USER (OpenTelemetry Instance ID, e.g. 1586681).
 // Tuned for low traffic / small nodes.
+
+// ┌─────────────────────────────────────────────────────────────────────────────┐
+// │  WATCHED NAMESPACES — edit this list only                                   │
+// │  All three pipelines (metrics, logs, traces) update automatically.          │
+// │  Supports up to five entries.                                               │
+// └─────────────────────────────────────────────────────────────────────────────┘
+//
+//   costy          — cost-accounting backend + frontend
+//   microservices  — auth-service, email-service, email-template-service, user-service
+//
+// To add a namespace: uncomment one of the placeholder lines below and set its value.
 
 logging {
   level  = "info"
   format = "logfmt"
 }
 
-discovery.kubernetes "costy_pods" {
+// ── Single pod discovery shared by BOTH metrics and logs pipelines ────────────
+// Edit the names list here; no other change is needed.
+discovery.kubernetes "pods" {
   role = "pod"
-  namespaces { names = ["costy", "microservices"] }
+  namespaces {
+    names = [
+      "costy",
+      "microservices",
+      // "namespace-3",
+      // "namespace-4",
+      // "namespace-5",
+    ]
+  }
 }
 
-discovery.relabel "costy_metrics" {
-  targets = discovery.kubernetes.costy_pods.targets
+// ─────────────────────────────────────────────────────────────────────────────
+// METRICS PIPELINE  →  Grafana Cloud Mimir
+// Scrapes any pod that carries prometheus.io/scrape="true" annotations.
+// ─────────────────────────────────────────────────────────────────────────────
 
+discovery.relabel "metrics" {
+  targets = discovery.kubernetes.pods.targets
+
+  // Keep only pods that opted in to scraping.
   rule {
     source_labels = ["__meta_kubernetes_pod_annotation_prometheus_io_scrape"]
     action        = "keep"
     regex         = "true"
   }
+  // Honour prometheus.io/path annotation (default: /metrics).
   rule {
     source_labels = ["__meta_kubernetes_pod_annotation_prometheus_io_path"]
     action        = "replace"
     target_label  = "__metrics_path__"
     regex         = "(.+)"
   }
+  // Honour prometheus.io/port annotation.
   rule {
     source_labels = ["__address__", "__meta_kubernetes_pod_annotation_prometheus_io_port"]
     action        = "replace"
@@ -52,8 +81,8 @@ discovery.relabel "costy_metrics" {
   }
 }
 
-prometheus.scrape "costy" {
-  targets         = discovery.relabel.costy_metrics.output
+prometheus.scrape "services" {
+  targets         = discovery.relabel.metrics.output
   forward_to      = [prometheus.remote_write.grafana_cloud.receiver]
   scrape_interval = "60s"
   scrape_timeout  = "8s"
@@ -73,13 +102,13 @@ prometheus.remote_write "grafana_cloud" {
   }
 }
 
-discovery.kubernetes "costy_pods_logs" {
-  role = "pod"
-  namespaces { names = ["costy", "microservices"] }
-}
+// ─────────────────────────────────────────────────────────────────────────────
+// LOGS PIPELINE  →  Grafana Cloud Loki
+// Streams pod stdout from all watched namespaces.
+// ─────────────────────────────────────────────────────────────────────────────
 
-discovery.relabel "costy_logs" {
-  targets = discovery.kubernetes.costy_pods_logs.targets
+discovery.relabel "logs" {
+  targets = discovery.kubernetes.pods.targets
 
   rule {
     source_labels = ["__meta_kubernetes_namespace"]
@@ -103,19 +132,24 @@ discovery.relabel "costy_logs" {
   }
 }
 
-loki.source.kubernetes "costy" {
-  targets    = discovery.relabel.costy_logs.output
-  forward_to = [loki.process.costy.receiver]
+loki.source.kubernetes "services" {
+  targets    = discovery.relabel.logs.output
+  forward_to = [loki.process.services.receiver]
 }
 
-loki.process "costy" {
-  // Grafana Cloud rejects lines past ~7d; k8s/API can replay older JSON @timestamp lines.
+loki.process "services" {
+  // Drop lines older than 5 days — Grafana Cloud rejects lines past ~7d and
+  // Kubernetes log streaming can replay buffered lines with old @timestamp.
   stage.drop {
     older_than          = "120h"
     drop_counter_reason = "timestamp_exceeds_cloud_ingest_window"
   }
 
-  // ── Backend services (Java / Logstash JSON) ───────────────────────────────
+  // ── Java backend services (Logstash JSON via LogstashEncoder) ─────────────
+  // Covers: all namespaces except the costy Nginx frontend service.
+  // OTel auto-injects traceId/spanId into SLF4J MDC; LogstashEncoder writes
+  // them under mdc.traceId / mdc.spanId.  Promoted to Loki structured metadata
+  // so a log line links directly to its Tempo span.
   stage.match {
     selector = `{service!="cost-accounting-frontend"}`
 
@@ -141,7 +175,8 @@ loki.process "costy" {
     }
   }
 
-  // ── Frontend Nginx (JSON access log) ─────────────────────────────────────
+  // ── Nginx frontend — costy cost-accounting-frontend ────────────────────────
+  // JSON access log: status, method, uri, duration fields.
   stage.match {
     selector = `{service="cost-accounting-frontend"}`
 
@@ -153,7 +188,7 @@ loki.process "costy" {
         duration = "duration",
       }
     }
-    // Expose HTTP status as a stream label for easy filtering (status=~"5..")
+    // status exposed as stream label → easy filter: {status=~"5.."}
     stage.labels {
       values = { status = "status" }
     }
@@ -186,6 +221,12 @@ loki.write "grafana_cloud" {
     env     = "production",
   }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TRACES PIPELINE  →  Grafana Cloud Tempo
+// Receives OTLP over gRPC (:4317) and HTTP (:4318) from all services that set
+// OTEL_EXPORTER_OTLP_ENDPOINT=http://grafana-alloy.observability.svc.cluster.local:4317
+// ─────────────────────────────────────────────────────────────────────────────
 
 otelcol.receiver.otlp "default" {
   grpc { endpoint = "0.0.0.0:4317" }

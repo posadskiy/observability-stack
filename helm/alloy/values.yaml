@@ -23,24 +23,44 @@ alloy:
     create: true
     content: |
       // ═══════════════════════════════════════════════════════════════════════════
-      // Grafana Alloy — Costy Observability Pipeline
+      // Grafana Alloy — multi-namespace observability pipeline
       // ═══════════════════════════════════════════════════════════════════════════
+
+      // ┌─────────────────────────────────────────────────────────────────────────┐
+      // │  WATCHED NAMESPACES — edit this list only                               │
+      // │  All three pipelines (metrics, logs, traces) update automatically.      │
+      // │  Supports up to five entries.                                           │
+      // └─────────────────────────────────────────────────────────────────────────┘
+      //
+      //   costy          — cost-accounting backend + frontend
+      //   microservices  — auth-service, email-service, email-template-service, user-service
+      //
+      // To add a namespace: uncomment one of the placeholder lines below.
 
       logging {
         level  = "info"
         format = "logfmt"
       }
 
-      // ─── METRICS ────────────────────────────────────────────────────────────────
-      discovery.kubernetes "costy_pods" {
+      // ── Single pod discovery shared by BOTH metrics and logs pipelines ─────────
+      // Edit the names list here; no other change is needed.
+      discovery.kubernetes "pods" {
         role = "pod"
         namespaces {
-          names = ["costy", "microservices"]
+          names = [
+            "costy",
+            "microservices",
+            // "namespace-3",
+            // "namespace-4",
+            // "namespace-5",
+          ]
         }
       }
 
-      discovery.relabel "costy_metrics" {
-        targets = discovery.kubernetes.costy_pods.targets
+      // ─── METRICS ────────────────────────────────────────────────────────────────
+
+      discovery.relabel "metrics" {
+        targets = discovery.kubernetes.pods.targets
 
         rule {
           source_labels = ["__meta_kubernetes_pod_annotation_prometheus_io_scrape"]
@@ -78,8 +98,8 @@ alloy:
         }
       }
 
-      prometheus.scrape "costy" {
-        targets         = discovery.relabel.costy_metrics.output
+      prometheus.scrape "services" {
+        targets         = discovery.relabel.metrics.output
         forward_to      = [prometheus.remote_write.grafana_cloud.receiver]
         scrape_interval = "60s"
         scrape_timeout  = "8s"
@@ -100,15 +120,9 @@ alloy:
       }
 
       // ─── LOGS ───────────────────────────────────────────────────────────────────
-      discovery.kubernetes "costy_pods_logs" {
-        role = "pod"
-        namespaces {
-          names = ["costy", "microservices"]
-        }
-      }
 
-      discovery.relabel "costy_logs" {
-        targets = discovery.kubernetes.costy_pods_logs.targets
+      discovery.relabel "logs" {
+        targets = discovery.kubernetes.pods.targets
 
         rule {
           source_labels = ["__meta_kubernetes_namespace"]
@@ -132,19 +146,23 @@ alloy:
         }
       }
 
-      loki.source.kubernetes "costy" {
-        targets    = discovery.relabel.costy_logs.output
-        forward_to = [loki.process.costy.receiver]
+      loki.source.kubernetes "services" {
+        targets    = discovery.relabel.logs.output
+        forward_to = [loki.process.services.receiver]
       }
 
-      loki.process "costy" {
-        // Grafana Cloud rejects lines past ~7d; k8s/API can replay older JSON @timestamp lines.
+      loki.process "services" {
+        // Drop lines older than 5 days — Grafana Cloud rejects lines past ~7d and
+        // Kubernetes log streaming can replay buffered lines with old @timestamp.
         stage.drop {
           older_than          = "120h"
           drop_counter_reason = "timestamp_exceeds_cloud_ingest_window"
         }
 
-        // ── Backend services (Java / Logstash JSON) ─────────────────────────────
+        // ── Java backend services (Logstash JSON via LogstashEncoder) ───────────
+        // Covers all namespaces except the costy Nginx frontend.
+        // OTel MDC fields mdc.traceId / mdc.spanId are promoted to Loki structured
+        // metadata so a log line links directly to its Tempo span.
         stage.match {
           selector = `{service!="cost-accounting-frontend"}`
 
@@ -156,9 +174,7 @@ alloy:
             }
           }
           stage.labels {
-            values = {
-              level = "level",
-            }
+            values = { level = "level" }
           }
           stage.structured_metadata {
             values = {
@@ -172,7 +188,8 @@ alloy:
           }
         }
 
-        // ── Frontend Nginx (JSON access log) ────────────────────────────────────
+        // ── Nginx frontend — costy cost-accounting-frontend ─────────────────────
+        // JSON access log: status exposed as stream label → filter {status=~"5.."}
         stage.match {
           selector = `{service="cost-accounting-frontend"}`
 
@@ -184,11 +201,8 @@ alloy:
               duration = "duration",
             }
           }
-          // Expose HTTP status as a stream label for easy filtering (status=~"5..")
           stage.labels {
-            values = {
-              status = "status",
-            }
+            values = { status = "status" }
           }
           stage.structured_metadata {
             values = {
@@ -197,8 +211,6 @@ alloy:
               duration = "duration",
             }
           }
-          // Drop Nginx health-check access log lines (health endpoint has access_log off
-          // in nginx.conf, but this is a safety net for any proxy-level probes).
           stage.drop {
             expression          = ".*/health.*"
             drop_counter_reason = "healthcheck_probe"
@@ -223,25 +235,20 @@ alloy:
       }
 
       // ─── TRACES ─────────────────────────────────────────────────────────────────
+      // Receives OTLP from all services pointing at
+      // http://grafana-alloy.observability.svc.cluster.local:4317
+
       otelcol.receiver.otlp "default" {
-        grpc {
-          endpoint = "0.0.0.0:4317"
-        }
-        http {
-          endpoint = "0.0.0.0:4318"
-        }
-        output {
-          traces = [otelcol.processor.batch.default.input]
-        }
+        grpc { endpoint = "0.0.0.0:4317" }
+        http { endpoint = "0.0.0.0:4318" }
+        output { traces = [otelcol.processor.batch.default.input] }
       }
 
       otelcol.processor.batch "default" {
-        timeout          = "10s"
-        send_batch_size  = 256
+        timeout             = "10s"
+        send_batch_size     = 256
         send_batch_max_size = 512
-        output {
-          traces = [otelcol.exporter.otlphttp.grafana_cloud.input]
-        }
+        output { traces = [otelcol.exporter.otlphttp.grafana_cloud.input] }
       }
 
       otelcol.auth.basic "grafana_cloud" {
