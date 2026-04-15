@@ -34,6 +34,7 @@ alloy:
       //
       //   costy          — cost-accounting backend + frontend
       //   microservices  — auth-service, email-service, email-template-service, user-service
+      //   skill-repeater — skill-repeater-service
       //
       // To add a namespace: uncomment one of the placeholder lines below.
 
@@ -50,7 +51,8 @@ alloy:
           names = [
             "costy",
             "microservices",
-            // "namespace-3",
+            "java-swing-tutor",
+            "skill-repeater",
             // "namespace-4",
             // "namespace-5",
           ]

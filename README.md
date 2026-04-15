@@ -147,6 +147,7 @@ uptime %, response time history, and probe map by region.
 ```
 Grafana Cloud → Explore → Loki → {namespace="costy"}
 Grafana Cloud → Explore → Loki → {namespace="microservices"}
+Grafana Cloud → Explore → Loki → {namespace="skill-repeater"}
 ```
 
 **Metrics** (after service rebuild + redeploy):
@@ -154,6 +155,7 @@ Grafana Cloud → Explore → Loki → {namespace="microservices"}
 ```
 Grafana Cloud → Explore → Prometheus → jvm_memory_used_bytes{namespace="costy"}
 Grafana Cloud → Explore → Prometheus → jvm_memory_used_bytes{namespace="microservices"}
+Grafana Cloud → Explore → Prometheus → jvm_memory_used_bytes{namespace="skill-repeater"}
 ```
 
 **Traces**:
