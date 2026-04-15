@@ -27,6 +27,7 @@ discovery.kubernetes "pods" {
     names = [
       "costy",
       "microservices",
+      "java-swing-tutor",
       // "namespace-3",
       // "namespace-4",
       // "namespace-5",
