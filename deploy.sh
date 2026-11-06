@@ -8,12 +8,18 @@
 # Usage:
 #   ./deploy.sh
 #   ./deploy.sh --dry-run
+#
+# Chart version is pinned (ALLOY_CHART_VERSION, default below) so a deploy never
+# upgrades Alloy by accident. To upgrade: bump the default, run --dry-run, then deploy.
+#   ALLOY_CHART_VERSION=1.8.0 ./deploy.sh --dry-run
 set -euo pipefail
 
 NAMESPACE="observability"
 HELM_RELEASE="grafana-alloy"
+ALLOY_CHART_VERSION="${ALLOY_CHART_VERSION:-1.7.0}"   # currently deployed: chart 1.7.0 / Alloy v1.15.0
 SECRET_NAME="grafana-cloud-credentials"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ALLOY_CONFIG="$SCRIPT_DIR/config/alloy/config.alloy"
 
 DRY_RUN=false
 if [[ "${1:-}" == "--dry-run" ]]; then
@@ -37,6 +43,10 @@ if ! command -v envsubst &>/dev/null; then
   exit 1
 fi
 
+if [[ ! -f "$ALLOY_CONFIG" ]]; then
+  echo "ERROR: Alloy config not found: $ALLOY_CONFIG" && exit 1
+fi
+
 if [[ -z "${GRAFANA_OBSERVABILITY_USER_TOKEN:-}" ]]; then
   echo "ERROR: GRAFANA_OBSERVABILITY_USER_TOKEN is not set."
   echo "       export GRAFANA_OBSERVABILITY_USER_TOKEN=glc_..."
@@ -48,8 +58,9 @@ if [[ -z "${GRAFANA_OBSERVABILITY_OTLP_TOKEN:-}" ]]; then
   exit 1
 fi
 
-echo "    kubectl: $(kubectl version --client --short 2>/dev/null | head -1)"
+echo "    kubectl: $(kubectl version --client 2>/dev/null | head -1)"
 echo "    helm:    $(helm version --short)"
+echo "    chart:   grafana/alloy $ALLOY_CHART_VERSION"
 echo "    cluster: $(kubectl config current-context)"
 
 echo ""
@@ -72,26 +83,25 @@ fi
 
 echo ""
 echo "==> Adding Grafana Helm repository..."
-if [[ "$DRY_RUN" == "true" ]]; then
-  echo "    [dry-run] helm repo add grafana && helm repo update"
-else
-  helm repo add grafana https://grafana.github.io/helm-charts 2>/dev/null || true
-  helm repo update grafana
-fi
+# Also runs in dry-run: it only refreshes the local Helm cache, and the chart is needed to render.
+helm repo add grafana https://grafana.github.io/helm-charts 2>/dev/null || true
+helm repo update grafana
 
 echo ""
 echo "==> Installing / upgrading Grafana Alloy..."
 HELM_CMD=(
   helm upgrade --install "$HELM_RELEASE" grafana/alloy
+  --version "$ALLOY_CHART_VERSION"
   --namespace "$NAMESPACE"
   --values "$SCRIPT_DIR/helm/alloy/values.yaml"
+  --set-file "alloy.configMap.content=$ALLOY_CONFIG"
   --wait
   --timeout 120s
 )
 
 if [[ "$DRY_RUN" == "true" ]]; then
-  echo "    [dry-run] ${HELM_CMD[*]} --dry-run"
-  "${HELM_CMD[@]}" --dry-run
+  echo "    [dry-run] ${HELM_CMD[*]} --dry-run=client"
+  "${HELM_CMD[@]}" --dry-run=client
 else
   "${HELM_CMD[@]}"
 fi

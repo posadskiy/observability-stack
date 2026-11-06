@@ -11,7 +11,9 @@
 //
 //   costy          — cost-accounting backend + frontend
 //   microservices  — auth-service, email-service, email-template-service, user-service
-//   skill-repeater — skill-repeater-service
+//   grammarbar          — grammarbar-backend + landing
+//   cocktailcheck — interaction/drug services, dbs, landing, demo
+//   website             — posadskiy-website
 //
 // To add a namespace: uncomment one of the placeholder lines below and set its value.
 
@@ -28,10 +30,9 @@ discovery.kubernetes "pods" {
     names = [
       "costy",
       "microservices",
-      "java-swing-tutor",
-      "skill-repeater",
-      // "namespace-4",
-      // "namespace-5",
+      "grammarbar",
+      "cocktailcheck",
+      "website",
     ]
   }
 }
@@ -61,7 +62,7 @@ discovery.relabel "metrics" {
   rule {
     source_labels = ["__address__", "__meta_kubernetes_pod_annotation_prometheus_io_port"]
     action        = "replace"
-    regex         = "([^:]+)(?:\\d+)?;(\\d+)"
+    regex         = "([^:]+)(?::\\d+)?;(\\d+)"
     replacement   = "$1:$2"
     target_label  = "__address__"
   }
@@ -101,6 +102,72 @@ prometheus.remote_write "grafana_cloud" {
   external_labels = {
     cluster = "k3s-prod",
     env     = "production",
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// NODE / CONTAINER RESOURCE METRICS  →  Grafana Cloud Mimir
+// kubelet cAdvisor, scraped directly on the node (:10250): CPU, memory, network
+// per pod, plus node totals (id="/"). Authorised by existing RBAC (nodes/metrics);
+// the API-server proxy path would need the more powerful nodes/proxy.
+// ─────────────────────────────────────────────────────────────────────────────
+
+discovery.kubernetes "nodes" {
+  role = "node"
+}
+
+discovery.relabel "cadvisor" {
+  targets = discovery.kubernetes.nodes.targets
+
+  rule {
+    source_labels = ["__meta_kubernetes_node_address_InternalIP"]
+    regex         = "(\\d+\\.\\d+\\.\\d+\\.\\d+)"
+    replacement   = "$1:10250"
+    target_label  = "__address__"
+  }
+  rule {
+    target_label = "__metrics_path__"
+    replacement  = "/metrics/cadvisor"
+  }
+  rule {
+    source_labels = ["__meta_kubernetes_node_name"]
+    target_label  = "node"
+  }
+}
+
+prometheus.scrape "cadvisor" {
+  targets           = discovery.relabel.cadvisor.output
+  scheme            = "https"
+  bearer_token_file = "/var/run/secrets/kubernetes.io/serviceaccount/token"
+  tls_config {
+    ca_file = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
+  }
+  scrape_interval = "60s"
+  scrape_timeout  = "20s"
+  forward_to      = [prometheus.relabel.cadvisor.receiver]
+}
+
+// Keep only what the dashboard uses, to limit series count.
+prometheus.relabel "cadvisor" {
+  forward_to = [prometheus.remote_write.grafana_cloud.receiver]
+
+  rule {
+    source_labels = ["__name__"]
+    regex         = "container_cpu_usage_seconds_total|container_memory_working_set_bytes|container_network_receive_bytes_total|container_network_transmit_bytes_total|machine_cpu_cores|machine_memory_bytes"
+    action        = "keep"
+  }
+  // Watched namespaces + node totals (id="/") + machine_* (no namespace/id).
+  rule {
+    source_labels = ["namespace", "id"]
+    regex         = "(costy|microservices|grammarbar|cocktailcheck|website);.*|;/|;"
+    action        = "keep"
+  }
+  // Drop pause containers and per-pod cgroup duplicates (container="") for CPU/memory.
+  // Network metrics are pod-level (container=""), so they are not filtered here.
+  rule {
+    source_labels = ["__name__", "namespace", "container"]
+    regex         = "container_(cpu|memory).*;.+;(POD|)"
+    action        = "drop"
   }
 }
 
@@ -149,17 +216,19 @@ loki.process "services" {
 
   // ── Java backend services (Logstash JSON via LogstashEncoder) ─────────────
   // Covers: all namespaces except the costy Nginx frontend service.
-  // OTel auto-injects traceId/spanId into SLF4J MDC; LogstashEncoder writes
-  // them under mdc.traceId / mdc.spanId.  Promoted to Loki structured metadata
-  // so a log line links directly to its Tempo span.
+  // LogstashEncoder writes MDC keys at the top level of the JSON line, so the
+  // trace/span ids are the top-level "traceId" / "spanId" fields (cocktailcheck
+  // services set them in RequestLoggingFilter from the active OpenTelemetry span).
+  // Promoted to Loki structured metadata, so {namespace="…"} | traceId="<id>"
+  // finds the log lines of a Tempo trace.
   stage.match {
     selector = `{service!="cost-accounting-frontend"}`
 
     stage.json {
       expressions = {
         level    = "level",
-        trace_id = "mdc.traceId",
-        span_id  = "mdc.spanId",
+        trace_id = "traceId",
+        span_id  = "spanId",
       }
     }
     stage.labels {
